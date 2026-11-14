@@ -1,0 +1,359 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Stochastic-Volatility-Pricing</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%23162a4d'/%3E%3Ctext x='16' y='23' font-size='22' text-anchor='middle' fill='%233987e5' font-family='sans-serif'%3E%CF%83%3C/text%3E%3C/svg%3E">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600&display=swap">
+  <link rel="stylesheet" href="css/style.css">
+  <script defer src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js"></script>
+  <script type="module" src="js/app.js"></script>
+</head>
+<body>
+
+<header class="topbar">
+  <div class="brand">
+    <span class="brand-mark">σ</span>
+    <div class="brand-name">Stochastic-Volatility-Pricing</div>
+  </div>
+  <nav class="tabs" role="tablist">
+    <button class="tab is-active" data-tab="pricer" role="tab">Pricer</button>
+    <button class="tab" data-tab="greeks" role="tab">Greeks &amp; surfaces</button>
+    <button class="tab" data-tab="convergence" role="tab">Convergence</button>
+    <button class="tab" data-tab="surface" role="tab">Volatility surface &amp; Heston</button>
+  </nav>
+  <a class="docs-link" href="/docs-site/" target="_blank" rel="noopener">Documentation ↗</a>
+</header>
+
+<div id="error-banner" class="error-banner" hidden>
+  <span id="error-text"></span>
+  <button id="error-close" aria-label="Dismiss">×</button>
+</div>
+
+<main class="layout" id="layout">
+
+  <aside class="sidebar card" id="sidebar">
+    <h2>Inputs</h2>
+    <form id="inputs" autocomplete="off">
+      <label><span>Spot price \(S_0\)</span><input name="S" type="number" step="any" value="42"></label>
+      <label><span>Strike \(K\)</span><input name="K" type="number" step="any" value="40"></label>
+      <label><span>Maturity \(T\) <small>years</small></span><input name="T" type="number" step="any" value="0.5"></label>
+      <label><span>Volatility \(\sigma\) <small>0.20 = 20%</small></span><input name="sigma" type="number" step="any" value="0.20"></label>
+      <label><span>Risk-free rate \(r\)</span><input name="r" type="number" step="any" value="0.10"></label>
+      <label><span>Dividend yield \(q\)</span><input name="q" type="number" step="any" value="0"></label>
+      <div class="field">Option type
+        <div class="segmented" id="kind">
+          <button type="button" class="is-active" data-value="call">Call</button>
+          <button type="button" data-value="put">Put</button>
+        </div>
+      </div>
+      <hr>
+      <label><span>Tree steps \(n\)</span><input name="n_steps" type="number" step="1" value="500"></label>
+      <label><span>Monte Carlo paths \(N\)</span><input name="n_paths" type="number" step="1" value="100000"></label>
+      <label><span>Random seed</span><input name="seed" type="number" step="1" value="42"></label>
+      <button class="primary" type="submit">Calculate</button>
+      <button class="link" type="button" id="reset-inputs">Reset to Hull's example</button>
+    </form>
+  </aside>
+
+  <div class="content">
+
+    <!-- Tab 1: Pricer -->
+    <section class="panel is-active" id="tab-pricer">
+      <div class="grid three">
+        <div class="card stat" id="card-bs">
+          <div class="stat-label">Black–Scholes <small>closed form</small>
+            <span class="info" tabindex="0">ⓘ<span class="tip">The exact price under the model. The other two methods should agree with it.</span></span>
+          </div>
+          <div class="stat-value" id="bs-price">–</div>
+          <div class="stat-note"></div>
+        </div>
+        <div class="card stat" id="card-tree">
+          <div class="stat-label">Binomial tree <small id="tree-steps"></small>
+            <span class="info" tabindex="0">ⓘ<span class="tip" id="tree-tip"></span></span>
+          </div>
+          <div class="stat-value" id="tree-price">–</div>
+          <div class="stat-note" id="tree-note"></div>
+        </div>
+        <div class="card stat" id="card-mc">
+          <div class="stat-label">Monte Carlo <small id="mc-paths"></small>
+            <span class="info" tabindex="0">ⓘ<span class="tip" id="mc-tip"></span></span>
+          </div>
+          <div class="stat-value" id="mc-price">–</div>
+          <div class="stat-note" id="mc-note"></div>
+        </div>
+      </div>
+
+      <div class="card section" id="card-mc-detail">
+        <details>
+          <summary><h3>Monte Carlo estimators</h3></summary>
+          <div class="section-body">
+            <div class="section-tools">
+              <a class="help" href="/docs-site/#monte-carlo" target="_blank" rel="noopener">How to read this ↗</a>
+              <button class="ghost" data-reset="mc-chart">Reset view</button>
+            </div>
+            <div class="grid two">
+              <table class="data">
+                <thead><tr><th>Estimator</th><th>Price</th><th>± 95%</th><th>Var. reduction</th></tr></thead>
+                <tbody id="mc-rows"></tbody>
+              </table>
+              <div class="plot short" id="mc-chart"></div>
+            </div>
+          </div>
+        </details>
+      </div>
+
+      <div class="card section" id="card-greeks">
+        <details>
+          <summary><h3>Greeks</h3></summary>
+          <div class="section-body">
+            <div class="section-tools">
+              <label class="inline">Finite differences of
+                <select id="fd-pricer">
+                  <option value="bs">Black–Scholes formula</option>
+                  <option value="tree">Binomial tree</option>
+                  <option value="mc">Monte Carlo (common random numbers)</option>
+                </select>
+              </label>
+              <label class="inline">Spot bump
+                <select id="fd-bump">
+                  <option value="0.001">0.1%</option>
+                  <option value="0.01" selected>1%</option>
+                  <option value="0.05">5%</option>
+                </select>
+              </label>
+              <a class="help" href="/docs-site/#greeks-table" target="_blank" rel="noopener">How to read this ↗</a>
+            </div>
+            <table class="data">
+              <thead><tr><th>Greek</th><th>Analytic</th><th>Finite difference</th><th>Difference</th></tr></thead>
+              <tbody id="greek-rows"></tbody>
+            </table>
+          </div>
+        </details>
+      </div>
+
+      <div class="card section" id="card-iv">
+        <details>
+          <summary><h3>Implied volatility</h3></summary>
+          <div class="section-body">
+            <form class="iv-form" id="iv-form">
+              <label class="inline">Observed option price
+                <input id="iv-price" type="number" step="any" value="5.00">
+              </label>
+              <button class="secondary" type="submit">Solve for σ</button>
+              <span class="iv-result" id="iv-result"></span>
+              <a class="help push" href="/docs-site/#implied-vol" target="_blank" rel="noopener">How to read this ↗</a>
+            </form>
+          </div>
+        </details>
+      </div>
+    </section>
+
+    <!-- Tab 2: Greeks and surfaces -->
+    <section class="panel" id="tab-greeks">
+      <div class="card" id="card-greek-curves">
+        <div class="card-head">
+          <h3>Against the spot price</h3>
+          <span class="card-tools">
+            <a class="help" href="/docs-site/#greek-curves" target="_blank" rel="noopener">How to read this ↗</a>
+            <button class="ghost" data-reset="greek-curves">Reset view</button>
+          </span>
+        </div>
+        <div class="controls">
+          <div class="segmented" id="curve-greek">
+            <button type="button" data-value="price">Price</button>
+            <button type="button" class="is-active" data-value="delta">Delta</button>
+            <button type="button" data-value="gamma">Gamma</button>
+            <button type="button" data-value="vega">Vega</button>
+            <button type="button" data-value="theta">Theta</button>
+            <button type="button" data-value="rho">Rho</button>
+            <button type="button" data-value="all">All six</button>
+          </div>
+        </div>
+        <div class="plot" id="greek-curves"></div>
+      </div>
+
+      <div class="card section" id="card-greek-surface">
+        <details>
+          <summary><h3>Surface over spot and maturity</h3></summary>
+          <div class="section-body">
+            <div class="section-tools">
+              <label class="inline">Show
+                <select id="surface-greek">
+                  <option value="price">Price</option>
+                  <option value="delta">Delta</option>
+                  <option value="gamma">Gamma</option>
+                  <option value="vega">Vega</option>
+                </select>
+              </label>
+              <a class="help" href="/docs-site/#greek-surface" target="_blank" rel="noopener">How to read this ↗</a>
+              <button class="ghost" data-reset="greek-surface">Reset view</button>
+            </div>
+            <div class="plot tall" id="greek-surface"></div>
+          </div>
+        </details>
+      </div>
+    </section>
+
+    <!-- Tab 3: Convergence -->
+    <section class="panel" id="tab-convergence">
+      <div class="card" id="card-tree-conv">
+        <div class="card-head">
+          <h3>Binomial tree against Black–Scholes</h3>
+          <span class="card-tools">
+            <a class="help" href="/docs-site/#tree-convergence" target="_blank" rel="noopener">How to read this ↗</a>
+            <button class="ghost" data-reset="tree-chart">Reset view</button>
+          </span>
+        </div>
+        <div class="controls">
+          <div class="segmented" id="tree-view">
+            <button type="button" class="is-active" data-value="price">Price</button>
+            <button type="button" data-value="error">Absolute error</button>
+          </div>
+        </div>
+        <div class="plot" id="tree-chart"></div>
+      </div>
+
+      <div class="card section" id="card-mc-conv">
+        <details>
+          <summary><h3>Monte Carlo: error against paths</h3></summary>
+          <div class="section-body">
+            <div class="section-tools">
+              <a class="help" href="/docs-site/#mc-convergence" target="_blank" rel="noopener">How to read this ↗</a>
+              <button class="ghost" data-reset="mc-conv-chart">Reset view</button>
+            </div>
+            <div class="plot" id="mc-conv-chart"></div>
+          </div>
+        </details>
+      </div>
+
+      <div class="card section" id="card-vr">
+        <details>
+          <summary><h3>Variance reduction summary</h3></summary>
+          <div class="section-body">
+            <div class="section-tools">
+              <a class="help" href="/docs-site/#variance-reduction" target="_blank" rel="noopener">How to read this ↗</a>
+            </div>
+            <table class="data">
+              <thead><tr><th>Estimator</th><th>Std. error</th><th>Var. reduction</th><th>Time</th><th>Efficiency gain</th></tr></thead>
+              <tbody id="vr-rows"></tbody>
+            </table>
+            <p class="hint" id="vr-hint"></p>
+          </div>
+        </details>
+      </div>
+    </section>
+
+    <!-- Tab 4: Volatility surface and Heston -->
+    <section class="panel" id="tab-surface">
+      <div class="card" id="card-market">
+        <div class="toolbar">
+          <button class="primary" id="calibrate" disabled>Calibrate Heston</button>
+          <span class="badge" id="market-badge" hidden></span>
+          <span class="info" tabindex="0" id="market-info" hidden>ⓘ<span class="tip" id="market-tip"></span></span>
+          <span class="status" id="market-status"></span>
+          <span class="card-tools push">
+            <button class="ghost" data-toggle="data-settings">Data settings</button>
+            <a class="help" href="/docs-site/#market-data" target="_blank" rel="noopener">Where the data comes from ↗</a>
+          </span>
+        </div>
+        <div class="toolbar sub" id="data-settings" hidden>
+          <label class="inline">Data source
+            <select id="market-source">
+              <option value="live">Live (yfinance, 15 min delayed)</option>
+              <option value="sample">Offline sample</option>
+            </select>
+          </label>
+          <label class="inline">Risk-free rate \(r\)
+            <input id="market-rate" type="number" step="any" value="0.05">
+          </label>
+          <button class="secondary" id="load-market">Load market data</button>
+        </div>
+      </div>
+
+      <div class="card" id="card-vol-surface">
+        <div class="card-head">
+          <h3>Implied volatility surface</h3>
+          <span class="card-tools">
+            <a class="help" href="/docs-site/#vol-surface" target="_blank" rel="noopener">How to read this ↗</a>
+            <button class="ghost" data-reset="vol-surface">Reset view</button>
+          </span>
+        </div>
+        <div class="controls">
+          <div class="segmented" id="surface-view">
+            <button type="button" class="is-active" data-value="market">Market</button>
+            <button type="button" data-value="heston" disabled>Heston fit</button>
+            <button type="button" data-value="error" disabled>Error</button>
+          </div>
+          <button class="ghost" data-toggle="surface-options">Display options</button>
+        </div>
+        <div class="controls" id="surface-options" hidden>
+          <div class="segmented" id="surface-z">
+            <button type="button" class="is-active" data-value="iv">Implied vol σ</button>
+            <button type="button" data-value="w">Total variance w</button>
+          </div>
+          <label class="check"><input type="checkbox" id="overlay-points" checked> Market points</label>
+        </div>
+        <div class="plot xtall" id="vol-surface"></div>
+      </div>
+
+      <div class="card section" id="card-params">
+        <details>
+          <summary><h3>Heston parameters</h3><span class="section-note" id="params-note"></span></summary>
+          <div class="section-body">
+            <div class="section-tools">
+              <a class="help" href="/docs-site/#heston-parameters" target="_blank" rel="noopener">How to read this ↗</a>
+            </div>
+            <div id="params-body"></div>
+          </div>
+        </details>
+      </div>
+
+      <div class="card section" id="card-smile">
+        <details>
+          <summary><h3>Smile by maturity</h3></summary>
+          <div class="section-body">
+            <div class="section-tools">
+              <label class="inline">Expiry <select id="smile-expiry"></select></label>
+              <a class="help" href="/docs-site/#smiles" target="_blank" rel="noopener">How to read this ↗</a>
+              <button class="ghost" data-reset="smile-chart">Reset view</button>
+            </div>
+            <div class="plot" id="smile-chart"></div>
+          </div>
+        </details>
+      </div>
+
+      <div class="card section" id="card-fit">
+        <details>
+          <summary><h3>Fit quality by maturity</h3></summary>
+          <div class="section-body">
+            <div class="section-tools">
+              <a class="help" href="/docs-site/#calibration-results" target="_blank" rel="noopener">How to read this ↗</a>
+            </div>
+            <table class="data">
+              <thead><tr><th>Expiry</th><th>T (years)</th><th>Quotes</th><th>Forward</th><th>Flat BS σ</th><th>RMSE flat BS</th><th>RMSE Heston</th></tr></thead>
+              <tbody id="fit-rows"></tbody>
+            </table>
+            <p class="hint">RMSE in volatility points (1 point = 0.01 of implied volatility).</p>
+          </div>
+        </details>
+      </div>
+    </section>
+
+  </div>
+</main>
+
+<footer class="footer">
+  <span>Built with FastAPI, NumPy, SciPy, Plotly.js and KaTeX.</span>
+  <a href="/docs-site/" target="_blank" rel="noopener">Documentation</a>
+  <a href="/docs" target="_blank" rel="noopener">API reference</a>
+</footer>
+
+</body>
+</html>

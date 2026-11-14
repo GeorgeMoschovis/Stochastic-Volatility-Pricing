@@ -1,0 +1,482 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Stochastic-Volatility-Pricing: documentation</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%23162a4d'/%3E%3Ctext x='16' y='23' font-size='22' text-anchor='middle' fill='%233987e5' font-family='sans-serif'%3E%CF%83%3C/text%3E%3C/svg%3E">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600&display=swap">
+  <link rel="stylesheet" href="style.css">
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js"
+    onload="renderMathInElement(document.body, {delimiters: [{left: '$$', right: '$$', display: true}, {left: '\\(', right: '\\)', display: false}]});"></script>
+</head>
+<body>
+<div class="page">
+
+<nav class="toc">
+  <div class="toc-title">Stochastic-Volatility-Pricing</div>
+  <div class="toc-sub">Documentation</div>
+  <a href="#overview">Overview and notation</a>
+  <a href="#risk-neutral">Risk-neutral pricing in one page</a>
+  <div class="part">Part 1: pricing library</div>
+  <a href="#black-scholes">Black–Scholes–Merton</a>
+  <a href="#binomial-tree">Binomial tree</a>
+  <a href="#monte-carlo">Monte Carlo</a>
+  <a class="sub" href="#mc-intervals">Reading the interval chart</a>
+  <a href="#greeks">Greeks</a>
+  <a class="sub" href="#greeks-table">The Greeks table</a>
+  <a class="sub" href="#greek-curves">Greeks against spot</a>
+  <a class="sub" href="#greek-surface">3D surfaces</a>
+  <a href="#implied-vol">Implied volatility</a>
+  <a href="#convergence">Convergence study</a>
+  <a class="sub" href="#tree-convergence">Tree charts</a>
+  <a class="sub" href="#mc-convergence">Monte Carlo chart</a>
+  <a class="sub" href="#variance-reduction">Variance reduction table</a>
+  <div class="part">Part 2: Heston calibration</div>
+  <a href="#smile">The volatility smile</a>
+  <a class="sub" href="#reading-surface">Reading a volatility surface</a>
+  <a href="#heston">Heston model</a>
+  <a class="sub" href="#heston-parameters">What each parameter does</a>
+  <a href="#market-data">Market data</a>
+  <a class="sub" href="#forward">Forward from put–call parity</a>
+  <a href="#calibration">Calibration</a>
+  <a class="sub" href="#calibration-results">Reading the results</a>
+  <a class="sub" href="#smiles">Smile chart</a>
+  <a class="sub" href="#vol-surface">3D volatility surface</a>
+  <div class="part">Reference</div>
+  <a href="#glossary">Glossary</a>
+  <a href="#references">References</a>
+  <a class="app-link" href="/">Open the app</a>
+</nav>
+
+<main>
+
+<h1>Documentation</h1>
+<p class="lead">Every formula used in the project and every number shown in the app, explained from the start.</p>
+
+<h2 id="overview">Overview and notation</h2>
+<p>The project has two parts. <b>Part 1</b> prices a European option three ways (a closed formula, a binomial tree and Monte Carlo simulation), computes its sensitivities, and measures how fast the two numerical methods converge to the formula. <b>Part 2</b> takes real S&amp;P 500 option prices, shows that a single Black–Scholes volatility cannot explain them, and fits the Heston stochastic-volatility model to all maturities at once.</p>
+<p>Each topic below follows the same five steps: <b>intuition</b>, <b>mathematics</b>, <b>assumptions and limitations</b>, <b>how to read the output</b>, and <b>where it is implemented</b>.</p>
+<p>In the app each tab opens with its main result only. Click a section title to open the rest, and hover over an ⓘ for a one-line explanation of the number next to it.</p>
+
+<table>
+  <tr><th>Symbol</th><th>Meaning</th><th class="num">Hull's example</th></tr>
+  <tr><td>\(S_0\)</td><td>Price of the underlying asset today (spot)</td><td class="num">42</td></tr>
+  <tr><td>\(K\)</td><td>Strike price: the price at which the option holder may buy (call) or sell (put)</td><td class="num">40</td></tr>
+  <tr><td>\(T\)</td><td>Time to maturity in years</td><td class="num">0.5</td></tr>
+  <tr><td>\(r\)</td><td>Risk-free interest rate, continuously compounded</td><td class="num">0.10</td></tr>
+  <tr><td>\(q\)</td><td>Dividend yield, continuously compounded</td><td class="num">0</td></tr>
+  <tr><td>\(\sigma\)</td><td>Volatility: annualised standard deviation of log-returns</td><td class="num">0.20</td></tr>
+</table>
+<p>The worked examples of Part 1 use Hull's textbook example in the last column, which is also the default in the app. A <b>European call</b> pays \(\max(S_T - K, 0)\) at maturity and a <b>European put</b> pays \(\max(K - S_T, 0)\), where \(S_T\) is the asset price at maturity.</p>
+
+<h2 id="risk-neutral">Risk-neutral pricing in one page</h2>
+<h4>Intuition</h4>
+<p>An option's payoff depends on a price that is unknown today, so it seems that its value must depend on how optimistic investors are. It does not. If the option can be replicated by trading the stock and a bank account, its price must equal the cost of that replicating portfolio, otherwise there is a risk-free profit. The cost of replication does not involve the stock's expected return.</p>
+<p>This has a convenient consequence: the price can be computed <i>as if</i> every asset grew on average at the risk-free rate. This pretend world is called the <b>risk-neutral measure</b>, written \(\mathbb{Q}\).</p>
+<h4>Mathematics</h4>
+<p>The price today of any European payoff is its expected value under \(\mathbb{Q}\), discounted at the risk-free rate:</p>
+$$V_0 = e^{-rT}\,\mathbb{E}^{\mathbb{Q}}\big[\text{payoff}(S_T)\big]$$
+<p>In the Black–Scholes world the stock follows a geometric Brownian motion whose drift under \(\mathbb{Q}\) is \(r - q\), not its real-world expected return:</p>
+$$dS_t = (r - q)\,S_t\,dt + \sigma S_t\,dW_t \quad\Longrightarrow\quad S_T = S_0 \exp\!\Big(\big(r - q - \tfrac12\sigma^2\big)T + \sigma\sqrt{T}\,Z\Big),\quad Z \sim N(0,1)$$
+<p>Here \(W_t\) is a Brownian motion and \(Z\) a standard normal random variable. The term \(-\tfrac12\sigma^2\) makes the average of \(S_T\) equal to \(S_0 e^{(r-q)T}\), the <b>forward price</b>.</p>
+<p>The three pricing methods of Part 1 compute this same expectation in three ways: Black–Scholes integrates it exactly, the binomial tree replaces the normal distribution by a discrete one, and Monte Carlo averages random samples.</p>
+<h4>Assumptions and limitations</h4>
+<ul>
+  <li>"Risk-neutral" does not mean that investors ignore risk. Risk aversion is already contained in today's stock price \(S_0\).</li>
+  <li>The argument needs continuous trading without costs and a model in which replication is possible. In the Heston model variance is a second source of risk, and \(\mathbb{Q}\) is then chosen by calibrating to option prices (Part 2).</li>
+</ul>
+
+<h2 id="black-scholes">Black–Scholes–Merton</h2>
+<h4>Intuition</h4>
+<p>If volatility is constant, the risk-neutral expectation above can be computed in closed form. The result is the Black–Scholes–Merton formula: a fast, exact benchmark against which the other methods are checked.</p>
+<h4>Mathematics</h4>
+$$c = S_0 e^{-qT} N(d_1) - K e^{-rT} N(d_2), \qquad p = K e^{-rT} N(-d_2) - S_0 e^{-qT} N(-d_1)$$
+$$d_1 = \frac{\ln(S_0/K) + \big(r - q + \tfrac12\sigma^2\big)T}{\sigma\sqrt{T}}, \qquad d_2 = d_1 - \sigma\sqrt{T}$$
+<p>\(c\) and \(p\) are the call and put prices and \(N(\cdot)\) is the standard normal cumulative distribution function. \(N(d_2)\) is the risk-neutral probability that the call finishes in the money; \(S_0 e^{-qT} N(d_1)\) is the present value of the stock received in that case.</p>
+<p>Calls and puts with the same strike and maturity are linked by <b>put–call parity</b>, which holds in any model without arbitrage:</p>
+$$c - p = S_0 e^{-qT} - K e^{-rT}$$
+<h4>Assumptions and limitations</h4>
+<ul>
+  <li>Constant volatility and interest rate; log-normal prices with no jumps; continuous trading without costs.</li>
+  <li>European exercise only.</li>
+  <li>Real markets violate the constant-volatility assumption. That is the subject of <a href="#smile">Part 2</a>.</li>
+</ul>
+<h4>How to read the output</h4>
+<p>With Hull's example:</p>
+$$d_1 = \frac{\ln(42/40) + (0.10 + 0.02)\times 0.5}{0.2\sqrt{0.5}} = 0.7693, \qquad d_2 = 0.7693 - 0.1414 = 0.6278$$
+$$c = 42 \times 0.7791 - 40\,e^{-0.05} \times 0.7349 = 32.72 - 27.96 = 4.76, \qquad p = 0.81$$
+<p>The <b>Black–Scholes card</b> in the Pricer tab shows 4.7594. The parity check is \(c - p = 4.7594 - 0.8086 = 3.9508 = 42 - 40e^{-0.05}\).</p>
+<div class="where"><b>Where it is implemented.</b> <code>pricing/black_scholes.py</code>: <code>bs_price</code>, <code>d1_d2</code>, and the analytic Greeks <code>bs_delta</code>, <code>bs_gamma</code>, <code>bs_vega</code>, <code>bs_theta</code>, <code>bs_rho</code>. All functions accept numpy arrays, which the 3D surfaces rely on.</div>
+
+<h2 id="binomial-tree">Binomial tree (Cox–Ross–Rubinstein)</h2>
+<h4>Intuition</h4>
+<p>Split the life of the option into \(n\) short steps. In each step the stock either rises by a factor \(u\) or falls by a factor \(d\). Starting from the known payoffs at maturity, work backwards: the value at each node is the discounted average of the two values that can follow it. The tree needs no formula for the payoff, so it also handles early exercise.</p>
+<h4>Mathematics</h4>
+$$\Delta t = \frac{T}{n}, \qquad u = e^{\sigma\sqrt{\Delta t}}, \qquad d = \frac1u, \qquad p^* = \frac{e^{(r-q)\Delta t} - d}{u - d}$$
+<p>\(p^*\) is the risk-neutral probability of an up move. It is chosen so that the expected stock price after one step is \(S e^{(r-q)\Delta t}\). Backward induction:</p>
+$$V = e^{-r\Delta t}\big(p^*\,V_{\text{up}} + (1 - p^*)\,V_{\text{down}}\big)$$
+<p>For an <b>American</b> option each node takes \(\max(V, \text{payoff if exercised now})\).</p>
+<h4>Assumptions and limitations</h4>
+<ul>
+  <li>Same model as Black–Scholes, so the European tree price converges to the formula as \(n \to \infty\).</li>
+  <li>The error shrinks roughly like \(1/n\) but oscillates, see <a href="#tree-convergence">the convergence study</a>.</li>
+  <li>The work grows like \(n^2\). If \(p^*\) falls outside \((0, 1)\), which happens with very low volatility and few steps, the function raises an error instead of returning a meaningless price.</li>
+</ul>
+<h4>How to read the output</h4>
+<p>A two-step tree for Hull's call can be checked by hand: \(\Delta t = 0.25\), \(u = 1.1052\), \(d = 0.9048\), \(p^* = 0.6014\). The three final prices are 51.30, 42.00 and 34.39 with payoffs 11.30, 2.00 and 0, so</p>
+$$c = e^{-0.10 \times 0.5}\big[(0.6014)^2 \times 11.30 + 2 \times 0.6014 \times 0.3986 \times 2.00\big] = 4.80$$
+<p>The <b>Binomial tree card</b> uses 500 steps by default and shows 4.7593, which is 0.00008 below Black–Scholes. The second line of the card prices the same option with American exercise. For Hull's call the two agree, because early exercise of a call on a stock without dividends is never optimal. Switch to a put to see a difference: 0.9103 (American) against 0.8085 (European), an early-exercise premium of 0.10.</p>
+<div class="where"><b>Where it is implemented.</b> <code>pricing/binomial.py</code>: <code>crr_price</code>. Each time step updates the whole layer of nodes with one numpy operation.</div>
+
+<h2 id="monte-carlo">Monte Carlo</h2>
+<h4>Intuition</h4>
+<p>Draw many possible final stock prices at random, compute the payoff for each, and average. The average converges to the true expectation, and the spread of the samples tells us how far off the average is likely to be. Monte Carlo is slow for this simple option but it is the method that still works when formulas and trees do not.</p>
+<h4>Mathematics</h4>
+<p><b>Plain estimator.</b> With \(N\) independent draws \(Z_i\) and \(S_T^{(i)}\) from the formula in the <a href="#risk-neutral">risk-neutral section</a>:</p>
+$$\hat V = e^{-rT}\,\frac1N \sum_{i=1}^N \text{payoff}\big(S_T^{(i)}\big), \qquad \text{SE} = \frac{s}{\sqrt N}, \qquad 95\%\text{ interval} = \hat V \pm 1.96\,\text{SE}$$
+<p>\(s\) is the sample standard deviation of the discounted payoffs and SE is the <b>standard error</b> of the estimate.</p>
+<p><b>Antithetic variates.</b> Every \(Z_i\) is used twice, as \(Z_i\) and \(-Z_i\), and the two discounted payoffs are averaged. A high payoff from one is offset by a low payoff from the other, so pair averages vary less than single payoffs. The standard error is computed from the \(N/2\) pair averages.</p>
+<p><b>Control variate.</b> The simulated \(S_T\) has a known mean, \(S_0 e^{(r-q)T}\). If the sample average of \(S_T\) happens to be too high, the payoff average of a call is probably too high as well, and can be corrected:</p>
+$$\hat V_{\text{CV}} = \hat V - b^*\Big(\overline{S_T} - S_0 e^{(r-q)T}\Big)e^{-rT}, \qquad b^* = \frac{\widehat{\text{Cov}}(Y, S_T)}{\widehat{\text{Var}}(S_T)}$$
+<p>\(Y\) is the payoff and \(b^*\) is the slope of a regression of the payoff on \(S_T\). The variance falls by the factor \(1 - \text{corr}(Y, S_T)^2\).</p>
+<p><b>Variance-reduction factor.</b> \((\text{SE}_{\text{plain}} / \text{SE}_{\text{method}})^2\) at the same number of simulated prices. A factor of 4 means plain Monte Carlo needs four times as many paths for the same accuracy.</p>
+<h4>Assumptions and limitations</h4>
+<ul>
+  <li>The error falls like \(N^{-1/2}\): one more correct digit costs 100 times more paths.</li>
+  <li>A 95% interval misses the true value about once in twenty runs. That is expected, not a bug.</li>
+  <li>\(b^*\) is estimated from the same sample, which adds a bias of order \(1/N\), far below the standard error.</li>
+  <li>Antithetic variates help when the payoff is monotone in \(Z\), as for calls and puts. The control variate helps most when the payoff is close to linear in \(S_T\), so it is strongest in the money and weak far out of the money.</li>
+  <li>All three estimators use the same budget: <code>n_paths</code> simulated terminal prices.</li>
+</ul>
+<h4>How to read the output</h4>
+<p>Hull's call with \(N = 100{,}000\) and seed 42:</p>
+<table>
+  <tr><th>Estimator</th><th class="num">Price</th><th class="num">± 95%</th><th class="num">95% interval</th><th class="num">Variance reduction</th></tr>
+  <tr><td>Plain</td><td class="num">4.7463</td><td class="num">0.0309</td><td class="num">[4.7154, 4.7771]</td><td class="num">1.0×</td></tr>
+  <tr><td>Antithetic</td><td class="num">4.7659</td><td class="num">0.0153</td><td class="num">[4.7506, 4.7812]</td><td class="num">4.1×</td></tr>
+  <tr><td>Control variate</td><td class="num">4.7637</td><td class="num">0.0085</td><td class="num">[4.7552, 4.7723]</td><td class="num">13.1×</td></tr>
+</table>
+<p>"± 95%" is \(1.96\,\text{SE}\), the half-width of the interval. All three intervals contain the exact price 4.7594. The control variate is 13 times more efficient in variance terms, which corresponds to a correlation of 0.96 between the call payoff and \(S_T\).</p>
+<h3 id="mc-intervals">Reading the interval chart</h3>
+<p>Each horizontal bar is one estimator: the dot is its price and the bar is its 95% confidence interval. The dashed vertical line is the Black–Scholes price. A correct estimator has a bar that crosses the dashed line most of the time, and a better estimator has a shorter bar. Change the seed to see the dots move while the bar lengths stay almost the same.</p>
+<div class="where"><b>Where it is implemented.</b> <code>pricing/monte_carlo.py</code>: <code>mc_plain</code>, <code>mc_antithetic</code>, <code>mc_control_variate</code>, the dispatcher <code>mc_price</code>, and <code>variance_reduction_factor</code>. Results come back as an <code>MCResult</code> with price, standard error and interval.</div>
+
+<h2 id="greeks">Greeks</h2>
+<h4>Intuition</h4>
+<p>The Greeks say how much the option price moves when one input moves a little. Traders use them to hedge: a position with delta 0.78 behaves, for small moves, like 0.78 shares. The project computes them two ways, from exact formulas and by repricing with slightly changed inputs, and compares the two.</p>
+<h4>Mathematics</h4>
+<table>
+  <tr><th>Greek</th><th>Definition</th><th>Call</th><th>Put</th></tr>
+  <tr><td>Delta \(\Delta\)</td><td>\(\partial V/\partial S\)</td><td>\(e^{-qT}N(d_1)\)</td><td>\(-e^{-qT}N(-d_1)\)</td></tr>
+  <tr><td>Gamma \(\Gamma\)</td><td>\(\partial^2 V/\partial S^2\)</td><td colspan="2">\(\dfrac{e^{-qT}\varphi(d_1)}{S\sigma\sqrt T}\)</td></tr>
+  <tr><td>Vega \(\nu\)</td><td>\(\partial V/\partial \sigma\)</td><td colspan="2">\(S e^{-qT}\varphi(d_1)\sqrt T\)</td></tr>
+  <tr><td>Rho \(\rho\)</td><td>\(\partial V/\partial r\)</td><td>\(KTe^{-rT}N(d_2)\)</td><td>\(-KTe^{-rT}N(-d_2)\)</td></tr>
+  <tr><td>Theta \(\Theta\)</td><td>\(-\partial V/\partial T\)</td><td colspan="2">written out below</td></tr>
+</table>
+$$\Theta_{\text{call}} = -\frac{S e^{-qT}\varphi(d_1)\,\sigma}{2\sqrt T} - rKe^{-rT}N(d_2) + qSe^{-qT}N(d_1)$$
+$$\Theta_{\text{put}} = -\frac{S e^{-qT}\varphi(d_1)\,\sigma}{2\sqrt T} + rKe^{-rT}N(-d_2) - qSe^{-qT}N(-d_1)$$
+<p>\(\varphi\) is the standard normal density. The <b>finite-difference</b> versions reprice the option with bumped inputs:</p>
+$$\Delta \approx \frac{V(S+h) - V(S-h)}{2h}, \qquad \Gamma \approx \frac{V(S+h) - 2V(S) + V(S-h)}{h^2}$$
+<p>and the same central difference in \(\sigma\), \(r\) and \(T\) for vega, rho and theta. They work with any pricing function, which is the point: most real products have no formula.</p>
+<h4>Assumptions and limitations</h4>
+<ul>
+  <li>The error of a central difference is of order \(h^2\) for a smooth price, so a smaller bump is better for the Black–Scholes formula.</li>
+  <li>Tree and Monte Carlo prices are <b>piecewise linear</b> in \(S\). With a tiny bump the second difference is zero or huge, so gamma needs a bump wide enough to average over many kinks. With a 0.1% bump the tree gamma of Hull's call comes out as 0.0000 instead of 0.0500; with 1% it is 0.0512 and with 5% it is 0.0501.</li>
+  <li><b>Common random numbers.</b> For Monte Carlo, \(V(S+h)\) and \(V(S-h)\) are computed with the same seed, hence the same \(Z_i\). The noise in the two prices is then almost identical and cancels in the difference. With independent samples the noise of the difference would be divided by the small number \(2h\) and would swamp the Greek.</li>
+</ul>
+<h3 id="greeks-table">How to read the Greeks table</h3>
+<p>Open the <b>Greeks</b> section of the Pricer tab. For Hull's call the analytic column shows the values below; the meaning of each one appears when you hover over the ⓘ next to its name.</p>
+<table>
+  <tr><th>Greek</th><th class="num">Value</th><th>Meaning</th></tr>
+  <tr><td>Delta</td><td class="num">0.7791</td><td>The option gains about $0.78 when the stock rises by $1.</td></tr>
+  <tr><td>Gamma</td><td class="num">0.0500</td><td>After that $1 rise, delta itself is about 0.05 higher.</td></tr>
+  <tr><td>Vega</td><td class="num">8.8134</td><td>Per 1.00 of volatility. One volatility point (20% to 21%) adds about $0.088.</td></tr>
+  <tr><td>Theta</td><td class="num">−4.5591</td><td>Per year. One calendar day costs about 4.5591 / 365 = $0.0125.</td></tr>
+  <tr><td>Rho</td><td class="num">13.9820</td><td>Per 1.00 of interest rate. One percentage point adds about $0.14.</td></tr>
+</table>
+<p>The <b>Finite difference</b> column applies the formulas above to the pricer chosen in the dropdown, and the <b>Difference</b> column shows finite difference minus analytic, with the relative error in brackets. Applied to the Black–Scholes formula the differences are tiny and only show the truncation error of the bump. Applied to the tree or to Monte Carlo they also contain that method's own error, and changing the spot bump shows the gamma effect described above.</p>
+<h3 id="greek-curves">Price and Greeks against the spot price</h3>
+<p>One line per maturity (1 month to 1 year, dark to light). The dotted vertical line is the strike. The buttons above the chart choose one quantity, or "All six" to see them side by side.</p>
+<ul>
+  <li><b>Price</b>: approaches the kinked payoff as maturity shortens.</li>
+  <li><b>Delta</b>: an S-shaped curve from 0 to 1 for a call. Shorter maturities are steeper around the strike.</li>
+  <li><b>Gamma</b>: a bump near the strike, taller and narrower for short maturities. This is where hedges need the most adjustment.</li>
+  <li><b>Vega</b>: also a bump near the strike, but larger for long maturities, because volatility has more time to matter.</li>
+  <li><b>Theta</b>: most negative near the strike for short maturities: time value decays fastest just before expiry.</li>
+  <li><b>Rho</b>: grows with maturity and with moneyness for a call.</li>
+</ul>
+<h3 id="greek-surface">3D surfaces</h3>
+<p>The same information as a surface over spot (one horizontal axis) and maturity (the other). The dropdown switches between price, delta, gamma and vega. Brighter means a higher value. The white marker is the option from the inputs panel. Drag to rotate, scroll to zoom, and use "Reset view" to return to the starting angle.</p>
+<div class="where"><b>Where it is implemented.</b> <code>pricing/greeks.py</code>: <code>fd_greeks</code> (any pricer) and <code>compare_greeks</code> (analytic against finite difference with absolute and relative errors). The surfaces come from the vectorised functions in <code>pricing/black_scholes.py</code>.</div>
+
+<h2 id="implied-vol">Implied volatility</h2>
+<h4>Intuition</h4>
+<p>Every input of the Black–Scholes formula can be observed except volatility. So the formula is usually run backwards: given an option's market price, which volatility makes the formula reproduce it? That number is the <b>implied volatility</b>. It is a way of quoting prices that makes options with different strikes and maturities comparable.</p>
+<h4>Mathematics</h4>
+<p>Solve \(\text{BS}(\sigma) = V_{\text{market}}\) for \(\sigma\). The Black–Scholes price increases with \(\sigma\), so there is at most one solution. It is found with Brent's method on \(\sigma \in [10^{-4}, 5]\). Before solving, the price is checked against bounds that hold in every arbitrage-free model:</p>
+$$\max\!\big(S_0e^{-qT} - Ke^{-rT},\,0\big) \le c \le S_0e^{-qT}, \qquad \max\!\big(Ke^{-rT} - S_0e^{-qT},\,0\big) \le p \le Ke^{-rT}$$
+<h4>Assumptions and limitations</h4>
+<ul>
+  <li>A price outside the bounds has no implied volatility. The function then returns NaN together with the reason.</li>
+  <li>Deep in-the-money options are almost insensitive to volatility, so their implied volatility is unreliable. Part 2 therefore uses out-of-the-money options only.</li>
+  <li>For whole arrays of prices a vectorised bisection is used instead of calling Brent in a loop, because calibration needs tens of thousands of inversions. Both solvers are tested to agree to \(10^{-9}\).</li>
+</ul>
+<h4>How to read the output</h4>
+<p>In the Pricer tab, open <b>Implied volatility</b> and enter an observed price. With Hull's inputs a call price of 5.00 gives an implied volatility of <b>22.65%</b>: higher than the 20% that gives 4.76, because the price is higher. A price of 3.90 has no solution, because the call is worth at least \(42 - 40e^{-0.05} = 3.95\) whatever the volatility.</p>
+<div class="where"><b>Where it is implemented.</b> <code>pricing/implied_vol.py</code>: <code>implied_vol</code> (one price, Brent, with a reason on failure), <code>implied_vol_vec</code> (arrays, bisection) and <code>no_arbitrage_bounds</code>.</div>
+
+<h2 id="convergence">Convergence study</h2>
+<p>Both numerical methods are compared with the exact Black–Scholes price while their accuracy parameter grows.</p>
+<h3 id="tree-convergence">Binomial tree charts</h3>
+<figure><img src="img/tree_convergence.png" alt="Tree price against steps, and absolute error on a log-log scale"><figcaption>Hull's call. Left: tree price for n = 10 to 100. Right: absolute error for n up to 1000.</figcaption></figure>
+<ul>
+  <li><b>Price</b> (the first view of the chart in the app). The tree price jumps above and below the dashed Black–Scholes line as \(n\) goes from even to odd. The reason is geometric: the strike sits at a different position between two final nodes for each \(n\), and the payoff has a kink at the strike.</li>
+  <li><b>Absolute error</b> (the second view). Both axes are logarithmic, so a power law is a straight line. The dashed reference line has slope −1, meaning error proportional to \(1/n\). The upper edge of the cloud follows it: doubling \(n\) halves the worst-case error. Points far below the line are step counts where the errors happen to cancel; they cannot be relied on.</li>
+</ul>
+<p>At \(n = 1000\) the error is 0.0004.</p>
+<h3 id="mc-convergence">Monte Carlo chart</h3>
+<figure class="narrow"><img src="img/mc_convergence.png" alt="Monte Carlo standard error and realised error against the number of paths"><figcaption>Hull's call, N from 100 to 1,000,000.</figcaption></figure>
+<ul>
+  <li><b>Lines</b> are standard errors: the typical size of the error. They are parallel to the dashed reference line of slope −½, which confirms \(\text{SE} \propto N^{-1/2}\).</li>
+  <li><b>Dots</b> are the errors actually realised with one seed. They scatter around and mostly below their line, as random errors should.</li>
+  <li>Variance reduction moves a line <b>down</b> without changing its slope. The gap between two lines is the square root of the variance-reduction factor.</li>
+</ul>
+<h3 id="variance-reduction">Variance reduction table</h3>
+<p>Measured at the largest \(N\) (one million paths):</p>
+<table>
+  <tr><th>Estimator</th><th class="num">Std. error</th><th class="num">Variance reduction</th><th class="num">Efficiency gain</th></tr>
+  <tr><td>Plain</td><td class="num">0.0050</td><td class="num">1.0×</td><td class="num">1.0×</td></tr>
+  <tr><td>Antithetic</td><td class="num">0.0025</td><td class="num">4.1×</td><td class="num">about 5–6×</td></tr>
+  <tr><td>Control variate</td><td class="num">0.0014</td><td class="num">13.2×</td><td class="num">about 8–9×</td></tr>
+</table>
+<p><b>Variance reduction</b> compares variances at the same \(N\). <b>Efficiency gain</b> is fairer: it compares \(\text{variance} \times \text{computing time}\), so an estimator that is more accurate but slower gets less credit. The control variate loses some of its advantage because it does extra work (a covariance), while the antithetic estimator gains because it draws half as many random numbers. Time is measured on your machine, so the efficiency column changes a little from run to run; the standard errors do not.</p>
+<div class="where"><b>Where it is implemented.</b> <code>pricing/convergence.py</code>: <code>tree_convergence</code>, <code>mc_convergence</code>, <code>variance_reduction_summary</code>. Running <code>python -m pricing.convergence</code> regenerates the two figures.</div>
+
+<h2 id="smile">The volatility smile</h2>
+<h4>Intuition</h4>
+<p>If Black–Scholes were right, every option on the same asset would have the same implied volatility, whatever its strike. Plotting implied volatility against strike would give a flat line. Real markets give something else.</p>
+<figure class="narrow"><img src="img/market_smile.png" alt="Market implied volatilities against log-moneyness with a flat Black-Scholes line"><figcaption>S&amp;P 500 options expiring 2027-02-19, sample of 2026-11-13. Each dot is one option.</figcaption></figure>
+<p>In this sample, an option struck 35% below the forward trades at an implied volatility of 42%, and one struck 13% above at 12%. The best single volatility, 20.5%, misses almost all of them. For equity indices the curve slopes downwards and is called a <b>skew</b>; for currencies it is often U-shaped, hence the name <b>smile</b>.</p>
+<h4>Why it exists, and why Black–Scholes cannot produce it</h4>
+<ul>
+  <li><b>Fat left tail.</b> Large falls happen more often than a log-normal distribution allows. Out-of-the-money puts pay off exactly in those cases, so they cost more than Black–Scholes says, which shows up as a higher implied volatility.</li>
+  <li><b>Volatility moves, and moves against the market.</b> When the index falls, volatility tends to rise. A falling market is therefore more dangerous than a rising one.</li>
+  <li><b>Demand for protection.</b> Investors buy puts as insurance and are willing to pay for it.</li>
+</ul>
+<p>Black–Scholes has one constant \(\sigma\) and a log-normal distribution, which is symmetric in log-returns. It has no parameter that could tilt or bend the curve, so its smile is flat by construction. A model needs random volatility, jumps, or a volatility that depends on the price level to do better. Heston takes the first route.</p>
+<h3 id="reading-surface">How to read a volatility surface</h3>
+<p>A volatility surface shows implied volatility for every strike and maturity at once.</p>
+<ul>
+  <li><b>First axis: log-moneyness</b> \(k = \ln(K/F)\), where \(F\) is the forward price for that maturity. \(k = 0\) is at the money, negative \(k\) are low strikes (out-of-the-money puts), positive \(k\) high strikes (out-of-the-money calls).</li>
+  <li><b>Second axis: maturity</b> \(T\) in years.</li>
+  <li><b>Along strikes</b> you see the <b>skew</b>: how fast volatility rises as the strike falls. It is steepest for short maturities.</li>
+  <li><b>Along maturities</b> you see the <b>term structure</b>: whether the market expects volatility to rise or fall over time.</li>
+</ul>
+<p>The app can also show <b>total implied variance</b> \(w = \sigma_{\text{IV}}^2\,T\). This is the quantity that accumulates over time, and for a fixed \(k\) it must not decrease with maturity, otherwise there would be a calendar-spread arbitrage. A surface that rises steadily from front to back in this view is consistent in time.</p>
+
+<h2 id="heston">Heston model</h2>
+<h4>Intuition</h4>
+<p>Heston keeps the Black–Scholes equation for the price but lets the variance be random too. Variance is pulled back towards a long-run level, like a spring, and its random shocks are correlated with the shocks to the price. A negative correlation means that volatility rises when the price falls, which produces the downward skew seen in the market.</p>
+<h4>Mathematics</h4>
+$$dS_t = (r - q)\,S_t\,dt + \sqrt{v_t}\,S_t\,dW^S_t, \qquad dv_t = \kappa(\theta - v_t)\,dt + \sigma_v\sqrt{v_t}\,dW^v_t, \qquad d\langle W^S, W^v\rangle_t = \rho\,dt$$
+<table>
+  <tr><th>Parameter</th><th>Meaning</th></tr>
+  <tr><td>\(v_0\)</td><td>Variance today. \(\sqrt{v_0}\) is today's volatility.</td></tr>
+  <tr><td>\(\kappa\)</td><td>Speed of mean reversion. A gap between \(v_t\) and \(\theta\) halves every \(\ln 2/\kappa\) years.</td></tr>
+  <tr><td>\(\theta\)</td><td>Long-run variance.</td></tr>
+  <tr><td>\(\sigma_v\)</td><td>Volatility of variance ("vol of vol").</td></tr>
+  <tr><td>\(\rho\)</td><td>Correlation between price shocks and variance shocks.</td></tr>
+</table>
+<p><b>Feller condition.</b> If \(2\kappa\theta \gt \sigma_v^2\), the pull towards \(\theta\) is strong enough that the variance never reaches zero. If it fails, the variance can touch zero and bounce back. The app reports the condition but does not enforce it: calibrations to index options usually violate it, and the pricing formula below stays valid either way.</p>
+<p><b>Characteristic function.</b> Heston prices are not available in closed form, but the characteristic function of the log-price is. With \(X_T = \ln(S_T/F)\), \(F = S_0e^{(r-q)T}\), and \(\varphi(u) = \mathbb{E}\big[e^{iuX_T}\big]\):</p>
+$$\varphi(u) = \exp\big(C + D\,v_0\big), \qquad \beta = \kappa - \rho\sigma_v iu, \qquad d = \sqrt{\beta^2 + \sigma_v^2\,(iu + u^2)}, \qquad g = \frac{\beta - d}{\beta + d}$$
+$$C = \frac{\kappa\theta}{\sigma_v^2}\left[(\beta - d)T - 2\ln\frac{1 - g e^{-dT}}{1 - g}\right], \qquad D = \frac{\beta - d}{\sigma_v^2}\cdot\frac{1 - e^{-dT}}{1 - g e^{-dT}}$$
+<p>This is the "little Heston trap" form of Albrecher et al. (2007). It is algebraically the same as Heston's 1993 formula but uses \(e^{-dT}\) where the original has \(e^{+dT}\). The original can jump between branches of the complex logarithm for long maturities and return wrong prices without warning; this form does not.</p>
+<p><b>Pricing.</b> Two probabilities are recovered from \(\varphi\) by Gil-Pelaez inversion, with \(k = \ln(K/F)\):</p>
+$$P_2 = \frac12 + \frac1\pi\int_0^\infty \text{Re}\!\left[\frac{e^{-iuk}\,\varphi(u)}{iu}\right]du, \qquad P_1 = \frac12 + \frac1\pi\int_0^\infty \text{Re}\!\left[\frac{e^{-iuk}\,\varphi(u - i)}{iu}\right]du$$
+$$c = e^{-rT}\big(F\,P_1 - K\,P_2\big)$$
+<p>\(P_2\) is the risk-neutral probability that the call finishes in the money and \(P_1\) is the same probability under the measure that uses the stock as unit of account. They play the roles of \(N(d_2)\) and \(N(d_1)\) in Black–Scholes. Puts follow from put–call parity.</p>
+<p><b>Numerical integration.</b> The integrals are cut at a finite upper limit. The integrand is bounded by \(|\varphi(u)|/u\), so the limit is doubled (25, 50, 100, …) until that bound is below \(10^{-10}\). A one-year option stops near 200. A two-week option with a large \(\sigma_v\) needs 1600, because its characteristic function decays slowly; a fixed limit of 200 would give visibly wrong short-dated prices. Two integrators are provided:</p>
+<ul>
+  <li><code>heston_price</code> uses scipy's adaptive <code>quad</code>. It is the reference: accurate, but it takes several milliseconds per option.</li>
+  <li><code>heston_call_strikes</code> uses a fixed Gauss–Legendre grid. The characteristic function does not depend on the strike, so it is evaluated once per maturity and reused for all strikes. About 1 ms for 30 strikes. The two are tested to agree to \(10^{-7}\).</li>
+</ul>
+<h4>Assumptions and limitations</h4>
+<ul>
+  <li>Five parameters must describe the whole surface. Very short maturities are the hardest: without jumps the model cannot make the skew steep enough there unless \(\sigma_v\) becomes very large.</li>
+  <li>Variance follows a specific square-root process; rates and dividends are constant.</li>
+  <li>The Monte Carlo scheme below has a discretisation bias that shrinks with the time step. It is only used as a check.</li>
+</ul>
+<h4>How to read the output: a Monte Carlo cross-check</h4>
+<p>To check the formula independently, the Heston equations are simulated with a full-truncation Euler scheme (negative variance values are replaced by zero where they are used). For \(S_0 = K = 100\), \(T = 1\), \(r = 5\%\), \(q = 2\%\), \(v_0 = \theta = 0.04\), \(\kappa = 2\), \(\sigma_v = 0.3\), \(\rho = -0.7\):</p>
+<table>
+  <tr><th>Method</th><th class="num">Call price</th></tr>
+  <tr><td>Semi-analytic (characteristic function)</td><td class="num">9.0595</td></tr>
+  <tr><td>Monte Carlo, 200,000 paths, 100 steps</td><td class="num">9.0960 ± 0.0500, interval [9.0460, 9.1461]</td></tr>
+  <tr><td>Black–Scholes with \(\sigma = 20\%\)</td><td class="num">9.2270</td></tr>
+</table>
+<p>The semi-analytic price lies inside the Monte Carlo interval. This is one of the automated tests. When \(\sigma_v \to 0\) and \(v_0 = \theta = \sigma^2\), the variance is constant and the Heston price equals Black–Scholes, which is tested as well.</p>
+
+<h3 id="heston-parameters">What each parameter does</h3>
+<p>Three parameters control the <b>level</b> of volatility across maturities, and two control the <b>shape</b> of the smile.</p>
+<div class="gallery">
+  <figure><img src="img/heston_v0.png" alt="Effect of v0 on the at-the-money term structure"><figcaption>\(v_0\) sets the short end. All curves return to the same long-run level.</figcaption></figure>
+  <figure><img src="img/heston_theta.png" alt="Effect of theta on the at-the-money term structure"><figcaption>\(\theta\) sets the long end. All curves start from the same level today.</figcaption></figure>
+  <figure><img src="img/heston_kappa.png" alt="Effect of kappa on the at-the-money term structure"><figcaption>\(\kappa\) sets how fast volatility travels from today's 30% to the long-run 20%.</figcaption></figure>
+  <figure><img src="img/heston_sigma_v.png" alt="Effect of sigma_v on the smile"><figcaption>\(\sigma_v\) adds curvature: both wings rise (shown with \(\rho = 0\)).</figcaption></figure>
+  <figure><img src="img/heston_rho.png" alt="Effect of rho on the smile"><figcaption>\(\rho\) tilts the smile: negative gives the equity skew, positive the reverse.</figcaption></figure>
+</div>
+<p><b>The Heston parameters section in the app.</b> Calibrating to the sample of 2026-11-13 gives:</p>
+<table>
+  <tr><th>Parameter</th><th class="num">Value</th><th>Reading</th></tr>
+  <tr><td>\(v_0\)</td><td class="num">0.0312</td><td>\(\sqrt{v_0} = 17.7\%\): the volatility the model starts from.</td></tr>
+  <tr><td>\(\kappa\)</td><td class="num">6.34</td><td>Half-life \(\ln 2 / 6.34 = 0.11\) years, about 40 days. Fast mean reversion.</td></tr>
+  <tr><td>\(\theta\)</td><td class="num">0.0518</td><td>\(\sqrt{\theta} = 22.8\%\): the long-run volatility, above today's level.</td></tr>
+  <tr><td>\(\sigma_v\)</td><td class="num">2.26</td><td>Large: needed to bend the short-maturity smiles enough.</td></tr>
+  <tr><td>\(\rho\)</td><td class="num">−0.72</td><td>Falls in the index come with rising volatility, which creates the downward skew.</td></tr>
+  <tr><td>Feller</td><td class="num">violated</td><td>\(2\kappa\theta = 0.66\) against \(\sigma_v^2 = 5.09\). The variance can touch zero.</td></tr>
+</table>
+<div class="where"><b>Where it is implemented.</b> <code>pricing/heston.py</code>: <code>HestonParams</code> (with the <code>feller</code> property), <code>heston_cf</code>, <code>integration_cutoff</code>, <code>heston_price</code>, <code>heston_call_strikes</code> and <code>heston_mc</code>.</div>
+
+<h2 id="market-data">Market data</h2>
+<h4>Intuition</h4>
+<p>A calibration is only as good as its inputs. Raw option quotes contain stale prices, wide spreads and contracts that never trade. This step turns them into a small, clean set of implied volatilities.</p>
+<h4>Where the data comes from</h4>
+<ul>
+  <li><b>Underlying:</b> the S&amp;P 500 index (<code>^SPX</code>). Its options are European, so the European pricing formulas apply exactly.</li>
+  <li><b>Live:</b> option chains from Yahoo Finance through <code>yfinance</code>, delayed by about 15 minutes.</li>
+  <li><b>Offline sample:</b> <code>data/sample_chain.csv</code>, a snapshot taken on 2026-11-13 at 15:55 UTC with the index at 7522.13. It is used when a download fails, for instance without a network or outside US trading hours, when Yahoo reports bids and asks of zero. The app then shows the label "Offline sample data, dated …" and the reason for the fallback.</li>
+  <li><b>Maturities:</b> one expiry near each of 14, 30, 60, 90, 150, 210, 280 and 365 days. From one month out only the standard monthly expiries (third Friday) are used, because they are the most liquid.</li>
+</ul>
+<h4>Cleaning steps</h4>
+<ol>
+  <li><b>Mid prices:</b> \((\text{bid} + \text{ask})/2\).</li>
+  <li><b>Liquidity filters:</b> bid above zero, positive open interest, and a relative spread \((\text{ask} - \text{bid})/\text{mid}\) below 25%.</li>
+  <li><b>Forward price</b> for each expiry from put–call parity (next section).</li>
+  <li><b>Out-of-the-money options only:</b> puts for \(K \lt F\), calls for \(K \ge F\). Their price is pure time value, so it is sensitive to volatility, and they are the most actively traded.</li>
+  <li><b>Implied volatility</b> of each mid price with the solver from Part 1.</li>
+  <li><b>Wings:</b> options with an absolute delta below 0.02 are dropped. They cost so little that a one-tick price change moves their implied volatility by several points.</li>
+  <li><b>Thinning:</b> at most 30 strikes per expiry, evenly spread across the remaining strikes. The sample ends up with 240 quotes over 8 expiries.</li>
+</ol>
+<h3 id="forward">Forward price from put–call parity</h3>
+<p>The forward \(F\) for an expiry is the strike at which a call and a put cost the same. From put–call parity written with the forward,</p>
+$$c - p = e^{-rT}(F - K) \quad\Longrightarrow\quad F = K + e^{rT}(c - p)$$
+<p>This avoids guessing a dividend yield: the market's own view of dividends is already inside \(c - p\). The five strikes where \(|c - p|\) is smallest are used, and the median of their forwards is taken.</p>
+<p><b>Worked example</b> (expiry 2027-02-19, \(T = 0.2691\)). At \(K = 7595\) the call mid is 240.10 and the put mid is 240.20, so</p>
+$$F = 7595 + e^{0.05 \times 0.2691}\,(240.10 - 240.20) = 7594.90$$
+<p>The five nearest strikes give forwards between 7593.97 and 7595.32, a spread of 0.02%.</p>
+<p><b>The interest rate.</b> \(r\) is an input, 5% by default. The forward hardly depends on it, because \(c - p\) is close to zero at the strikes used. The default was chosen to agree with the data: the slope of \(c - p\) against \(K\) equals \(-e^{-rT}\), and in the sample that slope implies rates of 4.8% to 5.1% for maturities beyond three months.</p>
+<h4>Assumptions and limitations</h4>
+<ul>
+  <li>Quotes are delayed and are mid prices, not prices at which one could trade.</li>
+  <li>Time to maturity is calendar time to 16:00 New York time on the expiry date, divided by 365. Monthly SPX options actually settle on the opening price that morning; the difference is a few hours.</li>
+  <li>On monthly dates Yahoo lists two series, morning-settled "SPX" and afternoon-settled "SPXW". Only the larger one is kept for each expiry.</li>
+  <li>One flat interest rate is used for all maturities.</li>
+</ul>
+<div class="where"><b>Where it is implemented.</b> <code>data/fetch_options.py</code>: <code>pick_expiries</code>, <code>download_chain</code>, <code>estimate_forward</code>, <code>clean_chain</code> and <code>load_market_data</code> (with the fallback). <code>python -m data.fetch_options</code> saves a timestamped snapshot to <code>data/cache/</code>.</div>
+
+<h2 id="calibration">Calibration</h2>
+<h4>Intuition</h4>
+<p>Calibration means choosing the five Heston parameters so that the model's implied volatilities are as close as possible to the market's, for all strikes and all maturities at the same time. One set of parameters must explain the whole surface.</p>
+<h4>Mathematics</h4>
+$$\min_{v_0,\,\kappa,\,\theta,\,\sigma_v,\,\rho}\ \sum_i w_i\Big(\sigma^{\text{IV}}_{\text{Heston},\,i} - \sigma^{\text{IV}}_{\text{mkt},\,i}\Big)^2$$
+<p>The sum runs over all quotes \(i\); the weights \(w_i\) are 1 by default. For each trial set of parameters, the model prices every option, each price is converted to an implied volatility, and the differences to the market are the residuals. The minimisation uses <code>scipy.optimize.least_squares</code>, a trust-region method for bounded problems, with</p>
+<ul>
+  <li><b>bounds</b> \(v_0, \theta \in [10^{-4}, 1]\), \(\kappa \in [10^{-2}, 10]\), \(\sigma_v \in [10^{-2}, 3]\), \(\rho \in [-0.99, 0.99]\);</li>
+  <li><b>initial guess</b> \(v_0\) and \(\theta\) equal to the at-the-money variance of the shortest and longest maturity, \(\kappa = 2\), \(\sigma_v = 0.5\), \(\rho = -0.7\).</li>
+</ul>
+<p>Errors are measured in implied volatility rather than in price, because a price error of one dollar is large for a cheap option and negligible for an expensive one.</p>
+<p><b>Benchmark.</b> The flat Black–Scholes benchmark is allowed one volatility per maturity, a horizontal line in each smile. The best such line is the average implied volatility of that maturity. It is a generous benchmark: 8 free numbers against Heston's 5.</p>
+<h4>Assumptions and limitations</h4>
+<ul>
+  <li>The optimiser is local. On the sample, four different starting points lead to the same parameters, but this is not guaranteed for other data.</li>
+  <li>Parameters are not sharply identified. A faster mean reversion can be offset by a larger volatility of variance, so \(\kappa\) and \(\sigma_v\) should be read together.</li>
+  <li>The fit is in-sample and on one snapshot. It says nothing about how stable the parameters are from day to day or how well the model hedges.</li>
+  <li>Where a model price has no implied volatility (numerically below intrinsic value), the model volatility is set to zero, which the optimiser treats as a large error.</li>
+</ul>
+<h3 id="calibration-results">How to read the results</h3>
+<p>On the sample the calibration takes one to two seconds and 67 evaluations of the model. <b>RMSE</b> is the root-mean-square error in <b>volatility points</b>, where one point is 0.01 of implied volatility (20% to 21%).</p>
+<table>
+  <tr><th>Expiry</th><th class="num">T (years)</th><th class="num">Forward</th><th class="num">Flat BS σ</th><th class="num">RMSE flat BS</th><th class="num">RMSE Heston</th></tr>
+  <tr><td>2026-11-27</td><td class="num">0.039</td><td class="num">7530.0</td><td class="num">19.7%</td><td class="num">7.01</td><td class="num">1.07</td></tr>
+  <tr><td>2026-12-18</td><td class="num">0.096</td><td class="num">7541.9</td><td class="num">22.2%</td><td class="num">8.80</td><td class="num">0.92</td></tr>
+  <tr><td>2027-01-15</td><td class="num">0.173</td><td class="num">7566.8</td><td class="num">20.9%</td><td class="num">8.05</td><td class="num">0.83</td></tr>
+  <tr><td>2027-02-19</td><td class="num">0.269</td><td class="num">7594.9</td><td class="num">20.5%</td><td class="num">7.86</td><td class="num">0.66</td></tr>
+  <tr><td>2027-04-16</td><td class="num">0.422</td><td class="num">7641.1</td><td class="num">24.3%</td><td class="num">9.70</td><td class="num">0.58</td></tr>
+  <tr><td>2027-05-21</td><td class="num">0.518</td><td class="num">7671.6</td><td class="num">23.5%</td><td class="num">8.83</td><td class="num">0.52</td></tr>
+  <tr><td>2027-08-20</td><td class="num">0.768</td><td class="num">7754.6</td><td class="num">22.2%</td><td class="num">7.55</td><td class="num">0.41</td></tr>
+  <tr><td>2027-11-19</td><td class="num">1.017</td><td class="num">7838.2</td><td class="num">21.5%</td><td class="num">6.95</td><td class="num">0.41</td></tr>
+  <tr><td><b>All</b></td><td></td><td></td><td></td><td class="num"><b>8.14</b></td><td class="num"><b>0.71</b></td></tr>
+</table>
+<p>Heston's typical error is 0.7 volatility points against 8.1 for the flat benchmark, about eleven times smaller. The fit is worst for the two-week expiry (1.07) and best for the longest ones (0.41), the usual pattern for this model.</p>
+<h3 id="smiles">Smile chart</h3>
+<figure><img src="img/fit_smiles.png" alt="Market, Heston and flat Black-Scholes smiles for eight expiries"><figcaption>All eight expiries of the sample. The app shows one at a time, chosen in the dropdown.</figcaption></figure>
+<ul>
+  <li><b>White dots</b> are market implied volatilities, one per option.</li>
+  <li><b>Blue line</b> is the Heston fit: the same five parameters in every panel.</li>
+  <li><b>Dashed orange line</b> is the flat Black–Scholes benchmark for that expiry.</li>
+</ul>
+<p>Example, expiry 2027-02-19: the put struck at 6450 (\(k = -0.163\)) has a market volatility of 26.15%. Heston gives 27.08%, an error of 0.93 points; the flat line gives 20.5%, an error of 5.7 points. At the money (\(K = 7600\)) the market is at 15.46% and Heston at 14.91%.</p>
+<p>Two systematic misfits are visible. For the shortest expiry the model's left wing is too flat. For high strikes the model curves upwards while the market keeps falling: a symmetric source of curvature (\(\sigma_v\)) cannot be switched off on one side only.</p>
+<h3 id="vol-surface">3D volatility surface</h3>
+<p>The axes are log-moneyness \(k = \ln(K/F)\), maturity \(T\), and height. Three views are available:</p>
+<ul>
+  <li><b>Market:</b> the quotes interpolated linearly onto a grid (<code>scipy.interpolate.griddata</code>). The grid follows the quoted region, which is narrow for short maturities and wide for long ones, so nothing is extrapolated. The white points are the raw quotes.</li>
+  <li><b>Heston fit:</b> the model surface on the same grid. With "Market points" ticked (under "Display options"), the distance between points and surface is the fitting error.</li>
+  <li><b>Error:</b> Heston minus market, in volatility points. The colour scale is centred at zero: grey means no error, red means the model is too high, blue too low. The points are the exact errors at the quotes.</li>
+</ul>
+<p>Under "Display options", a second switch changes the height from implied volatility to total variance \(w = \sigma_{\text{IV}}^2 T\) (see <a href="#reading-surface">how to read a volatility surface</a>). Drag to rotate, scroll to zoom, hover for values, and use "Reset view" to return to the starting angle.</p>
+<div class="where"><b>Where it is implemented.</b> <code>pricing/calibration.py</code>: <code>calibrate_heston</code>, <code>heston_implied_vols</code>, <code>initial_guess</code>, <code>flat_bs_benchmark</code>, <code>rmse_by_maturity</code>. The API endpoints <code>/api/heston/calibrate</code> and <code>/api/heston/surface</code> are in <code>api/main.py</code>, and the charts in <code>web/js/surface.js</code>. <code>python -m pricing.calibration</code> prints the table above and regenerates the smile figures.</div>
+
+<h2 id="glossary">Glossary</h2>
+<dl>
+  <dt>American / European option</dt><dd>An American option can be exercised at any time up to maturity, a European one only at maturity.</dd>
+  <dt>At the money (ATM)</dt><dd>Strike equal to the forward price (\(k = 0\)).</dd>
+  <dt>Calibration</dt><dd>Choosing model parameters so that model prices match market prices.</dd>
+  <dt>Characteristic function</dt><dd>\(\mathbb{E}[e^{iuX}]\), a transform that determines the distribution of \(X\). Known in closed form for Heston even though the density is not.</dd>
+  <dt>Common random numbers</dt><dd>Reusing the same random draws for two simulations so that their difference is not polluted by sampling noise.</dd>
+  <dt>Confidence interval</dt><dd>A range that contains the true value with a stated probability, here 95%.</dd>
+  <dt>Feller condition</dt><dd>\(2\kappa\theta \gt \sigma_v^2\). When it holds, the Heston variance stays strictly positive.</dd>
+  <dt>Forward price</dt><dd>The price agreed today for delivery at a future date: \(F = S_0e^{(r-q)T}\).</dd>
+  <dt>Greeks</dt><dd>Sensitivities of the option price to its inputs: delta, gamma, vega, theta, rho.</dd>
+  <dt>Implied volatility</dt><dd>The volatility that makes the Black–Scholes formula reproduce a given option price.</dd>
+  <dt>In / out of the money (ITM / OTM)</dt><dd>An option is in the money if exercising it now would pay something. A call is out of the money for \(K \gt F\), a put for \(K \lt F\).</dd>
+  <dt>Log-moneyness</dt><dd>\(k = \ln(K/F)\). Negative for low strikes.</dd>
+  <dt>Mid price</dt><dd>Average of the bid (best buying price) and the ask (best selling price).</dd>
+  <dt>Open interest</dt><dd>Number of contracts outstanding. Zero means nobody holds the option.</dd>
+  <dt>Put–call parity</dt><dd>\(c - p = S_0e^{-qT} - Ke^{-rT}\). Holds without any model.</dd>
+  <dt>Risk-neutral measure</dt><dd>The probabilities under which discounted asset prices have no drift. Prices are discounted expectations under it.</dd>
+  <dt>RMSE</dt><dd>Root-mean-square error: the square root of the average squared error.</dd>
+  <dt>Skew / smile</dt><dd>The pattern of implied volatility across strikes for one maturity.</dd>
+  <dt>Standard error</dt><dd>The standard deviation of an estimate, here \(s/\sqrt N\) for a Monte Carlo average.</dd>
+  <dt>Term structure</dt><dd>The pattern of implied volatility across maturities.</dd>
+  <dt>Total implied variance</dt><dd>\(w = \sigma_{\text{IV}}^2 T\).</dd>
+  <dt>Variance reduction</dt><dd>A technique that lowers the variance of a Monte Carlo estimator without changing its mean.</dd>
+  <dt>Volatility point</dt><dd>0.01 of volatility, for example from 20% to 21%.</dd>
+</dl>
+
+<h2 id="references">References</h2>
+<ul class="refs">
+  <li>Albrecher, H., Mayer, P., Schoutens, W. and Tistaert, J. (2007). The little Heston trap. <i>Wilmott Magazine</i>, January, 83–92.</li>
+  <li>Black, F. and Scholes, M. (1973). The pricing of options and corporate liabilities. <i>Journal of Political Economy</i>, 81(3), 637–654.</li>
+  <li>Cox, J., Ross, S. and Rubinstein, M. (1979). Option pricing: a simplified approach. <i>Journal of Financial Economics</i>, 7(3), 229–263.</li>
+  <li>Gatheral, J. (2006). <i>The Volatility Surface: A Practitioner's Guide</i>. Wiley.</li>
+  <li>Gil-Pelaez, J. (1951). Note on the inversion theorem. <i>Biometrika</i>, 38, 481–482.</li>
+  <li>Glasserman, P. (2004). <i>Monte Carlo Methods in Financial Engineering</i>. Springer.</li>
+  <li>Heston, S. (1993). A closed-form solution for options with stochastic volatility with applications to bond and currency options. <i>Review of Financial Studies</i>, 6(2), 327–343.</li>
+  <li>Hull, J. <i>Options, Futures, and Other Derivatives</i>. Pearson.</li>
+  <li>Lord, R., Koekkoek, R. and van Dijk, D. (2010). A comparison of biased simulation schemes for stochastic volatility models. <i>Quantitative Finance</i>, 10(2), 177–194.</li>
+  <li>Merton, R. (1973). Theory of rational option pricing. <i>Bell Journal of Economics and Management Science</i>, 4(1), 141–183.</li>
+</ul>
+
+<footer>Stochastic-Volatility-Pricing documentation. Numbers on this page come from the committed sample data and fixed random seeds, so they can be reproduced with the commands quoted above.</footer>
+
+</main>
+</div>
+</body>
+</html>
