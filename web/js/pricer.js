@@ -1,9 +1,10 @@
 // Tab 1: prices from the three methods, Monte Carlo intervals, the Greeks table and implied volatility.
 
 import { postJSON } from "./api.js";
-import { $, COLORS, ESTIMATORS, axis, fmt, fmtPct, fmtSci, fmtTimes, info, layout2d, plot, renderMath, withLoading } from "./ui.js";
+import { $, COLORS, ESTIMATORS, axis, countTo, fmt, fmtPct, fmtSci, fmtTimes, info, layout2d, plot, renderMath, withLoading } from "./ui.js";
 
 let lastInputs = null;
+let lastPrices = null;
 
 const GREEKS = {
   delta: { symbol: "Delta \\(\\Delta\\)", digits: 4 },
@@ -35,6 +36,10 @@ export function init() {
   });
 }
 
+export function redraw() {
+  if (lastPrices) drawIntervals(lastPrices);
+}
+
 export async function refresh(inputs) {
   lastInputs = inputs;
   $("iv-result").textContent = "";
@@ -42,13 +47,14 @@ export async function refresh(inputs) {
 }
 
 async function loadPrices(inputs) {
-  const cards = ["card-bs", "card-tree", "card-mc", "card-mc-detail"];
-  const data = await withLoading(cards, "Could not price the option", () => postJSON("/api/price", inputs));
+  const nodes = ["node-bs", "node-tree", "node-mc", "node-mc-detail"];
+  const data = await withLoading(nodes, "Could not price the option", () => postJSON("/api/price", inputs));
   if (!data) return;
+  lastPrices = data;
 
-  $("bs-price").textContent = fmt(data.bs);
+  countTo($("bs-price"), data.bs);
   $("tree-steps").textContent = `${inputs.n_steps} steps`;
-  $("tree-price").textContent = fmt(data.tree);
+  countTo($("tree-price"), data.tree);
   $("tree-note").textContent = `Tree minus Black–Scholes: ${fmtSci(data.tree - data.bs)}`;
   $("tree-tip").textContent =
     `With American exercise the tree gives ${fmt(data.tree_american)}, ` +
@@ -57,7 +63,7 @@ async function loadPrices(inputs) {
   const best = data.mc.find((row) => row.method === "control_variate");
   const inside = best.ci_low <= data.bs && data.bs <= best.ci_high;
   $("mc-paths").textContent = `${inputs.n_paths.toLocaleString("en-US")} paths`;
-  $("mc-price").textContent = fmt(best.price);
+  countTo($("mc-price"), best.price);
   $("mc-note").textContent = `± ${fmt(1.96 * best.std_error)} at 95% confidence`;
   $("mc-tip").textContent =
     `Control variate estimator. Its 95% interval [${fmt(best.ci_low)}, ${fmt(best.ci_high)}] ` +
@@ -94,20 +100,20 @@ function drawIntervals(data) {
   }));
 }
 
-function differencePill(row) {
-  return `<span class="pill">${fmtSci(row.finite_diff - row.analytic)} (${fmtPct(row.rel_error, 3)})</span>`;
+function difference(row) {
+  return `${fmtSci(row.finite_diff - row.analytic)} (${fmtPct(row.rel_error, 3)})`;
 }
 
 async function loadGreeks(inputs) {
   const body = { ...inputs, pricer: $("fd-pricer").value, bump_S: Number($("fd-bump").value) };
-  const data = await withLoading(["card-greeks"], "Could not compute the Greeks", () => postJSON("/api/greeks", body));
+  const data = await withLoading(["node-greeks"], "Could not compute the Greeks", () => postJSON("/api/greeks", body));
   if (!data) return;
   $("greek-rows").innerHTML = data.rows.map((row) => `
     <tr>
       <td>${GREEKS[row.greek].symbol} ${info(MEANING[row.greek](row.analytic))}</td>
       <td>${fmt(row.analytic, GREEKS[row.greek].digits)}</td>
       <td>${fmt(row.finite_diff, GREEKS[row.greek].digits)}</td>
-      <td>${differencePill(row)}</td>
+      <td>${difference(row)}</td>
     </tr>`).join("");
   renderMath($("greek-rows"));
 }
@@ -116,7 +122,7 @@ async function solveImpliedVol() {
   if (!lastInputs) return;
   const { S, K, T, r, q, kind } = lastInputs;
   const body = { price: Number($("iv-price").value), S, K, T, r, q, kind };
-  const data = await withLoading(["card-iv"], "Could not solve for implied volatility", () => postJSON("/api/implied-vol", body));
+  const data = await withLoading(["node-iv"], "Could not solve for implied volatility", () => postJSON("/api/implied-vol", body));
   if (!data) return;
   $("iv-result").innerHTML = data.implied_vol === null
     ? `<span class="pill">No solution</span> ${data.reason}.`

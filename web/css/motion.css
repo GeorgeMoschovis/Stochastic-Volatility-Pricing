@@ -1,0 +1,37 @@
+/* Small animations. Readers who ask their system for reduced motion get none of them. */
+
+@keyframes rise {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: none; }
+}
+
+/* a tab's content, an opened section and fresh table rows slide into place */
+.panel.is-active { animation: rise 0.3s ease-out; }
+.section details[open] .section-body { animation: rise 0.25s ease-out; }
+.error-banner { animation: rise 0.25s ease-out; }
+table.data tbody tr { animation: rise 0.25s ease-out backwards; }
+table.data tbody tr:nth-child(2) { animation-delay: 0.04s; }
+table.data tbody tr:nth-child(3) { animation-delay: 0.08s; }
+table.data tbody tr:nth-child(4) { animation-delay: 0.12s; }
+table.data tbody tr:nth-child(n+5) { animation-delay: 0.16s; }
+
+/* the three prices arrive one after the other */
+.stat { animation: rise 0.35s ease-out backwards; }
+.stat:nth-child(2) { animation-delay: 0.07s; }
+.stat:nth-child(3) { animation-delay: 0.14s; }
+
+/* a point grows under the pointer, and a section's point fills as it opens */
+.node::before { transition: transform 0.2s, background-color 0.25s, border-color 0.25s; }
+.node:hover::before { transform: scale(1.3); }
+
+/* colours fade when the theme changes or the pointer moves over a control */
+body, .topbar, .node > *, input, select, .tab, button, .pill, h3 {
+  transition: background-color 0.25s, color 0.25s, border-color 0.25s, opacity 0.25s, transform 0.15s, filter 0.15s;
+}
+.primary:active, .secondary:active, .segmented button:active, .tab:active { transform: scale(0.96); }
+.brand-mark { transition: transform 0.3s; }
+.brand:hover .brand-mark { transform: rotate(-12deg) scale(1.15); }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation: none !important; transition: none !important; }
+}

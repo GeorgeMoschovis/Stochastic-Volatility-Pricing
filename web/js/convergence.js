@@ -3,7 +3,8 @@
 import { getJSON } from "./api.js";
 import { $, COLORS, ESTIMATORS, LOG_AXIS, axis, fmtSci, fmtTimes, layout2d, plot, segmented, withLoading } from "./ui.js";
 
-const REFERENCE = { color: COLORS.muted, width: 1.2, dash: "dash" };
+// read at draw time, because the colour depends on the theme
+const reference = () => ({ color: COLORS.muted, width: 1.2, dash: "dash" });
 
 let study = null;
 let treeView = null;
@@ -12,10 +13,15 @@ export function init() {
   treeView = segmented("tree-view", drawTree);
 }
 
+export function redraw() {
+  drawTree();
+  if (study) drawMonteCarlo(study.mc);
+}
+
 export async function refresh(inputs) {
   const { S, K, T, r, q, sigma, kind, seed } = inputs;
-  const cards = ["card-tree-conv", "card-mc-conv", "card-vr"];
-  const data = await withLoading(cards, "Could not run the convergence study", () =>
+  const nodes = ["node-tree-conv", "node-mc-conv", "node-vr"];
+  const data = await withLoading(nodes, "Could not run the convergence study", () =>
     getJSON("/api/convergence", { S, K, T, r, q, sigma, kind, seed }));
   if (!data) return;
   study = data;
@@ -57,7 +63,7 @@ function drawTreeError(tree) {
   });
   const reference = {
     x: tree.n, y: tree.n.map((n) => (error[0] * tree.n[0]) / n), name: "slope −1", mode: "lines",
-    line: REFERENCE, hoverinfo: "skip",
+    line: reference(), hoverinfo: "skip",
   };
   plot("tree-chart", [points(0, "even n", COLORS.series[0]), points(1, "odd n", COLORS.series[1]), reference],
     layout2d({ xaxis: axis("steps n", LOG_AXIS), yaxis: axis("|tree − Black–Scholes|", LOG_AXIS) }));
@@ -79,7 +85,7 @@ function drawMonteCarlo(mc) {
   const start = 2.5 * mc.plain.std_error[0];
   traces.push({
     x: mc.N, y: mc.N.map((n) => start * Math.sqrt(mc.N[0] / n)), name: "slope −½", mode: "lines",
-    line: REFERENCE, hoverinfo: "skip",
+    line: reference(), hoverinfo: "skip",
   });
   traces.push({ x: [null], y: [null], name: "dots: realised |MC − BS|", mode: "markers", marker: { color: COLORS.muted, size: 6 } });
   plot("mc-conv-chart", traces, layout2d({ xaxis: axis("paths N", LOG_AXIS), yaxis: axis("error", LOG_AXIS) }));

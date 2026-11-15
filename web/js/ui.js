@@ -1,22 +1,41 @@
 // Shared helpers: number formatting, loading and error states, and the Plotly theme.
 
-export const COLORS = {
-  text: "#e6ebf5",
-  text2: "#a9b4c9",
-  muted: "#7c89a3",
-  grid: "#1e2a44",
-  axis: "#2a3a5c",
-  surface: "#111a2e",
-  // categorical series, always used in this order
-  series: ["#3987e5", "#d95926", "#199e70", "#c98500", "#d55181"],
-  // one-hue ramp for ordered series such as maturities (short to long)
-  ramp: ["#1c5cab", "#3987e5", "#86b6ef", "#cde2fb"],
+// chart colours of each theme
+const PALETTES = {
+  dark: {
+    text: "#e6ebf5", text2: "#a9b4c9", muted: "#7c89a3", grid: "#1e2a44", axis: "#2a3a5c", surface: "#111a2e", hover: "#16213a",
+    // one-hue ramp for ordered series such as maturities (short to long)
+    ramp: ["#1c5cab", "#3987e5", "#86b6ef", "#cde2fb"],
+    // low values recede into the background, high values stand out
+    sequential: [[0, "#0d366b"], [0.5, "#3987e5"], [1, "#cde2fb"]],
+    // two opposite hues around a neutral midpoint, for signed errors
+    diverging: [[0, "#3987e5"], [0.5, "#4a5468"], [1, "#e66767"]],
+  },
+  light: {
+    text: "#15233b", text2: "#44546d", muted: "#6a7a92", grid: "#dbe6f3", axis: "#b7c8de", surface: "#f8fbff", hover: "#ffffff",
+    ramp: ["#a9cbf3", "#5d9be8", "#2468be", "#0f3a75"],
+    sequential: [[0, "#dbe9fa"], [0.5, "#3987e5"], [1, "#0d366b"]],
+    diverging: [[0, "#2f7bdc"], [0.5, "#d3dae4"], [1, "#d64545"]],
+  },
 };
 
-// low values recede into the dark background, high values are bright
-export const SEQUENTIAL = [[0, "#0d366b"], [0.5, "#3987e5"], [1, "#cde2fb"]];
-// two opposite hues around a neutral midpoint, for signed errors
-export const DIVERGING = [[0, "#3987e5"], [0.5, "#4a5468"], [1, "#e66767"]];
+// categorical series, always used in this order and the same in both themes
+export const COLORS = { series: ["#3987e5", "#d95926", "#199e70", "#c98500", "#d55181"], ...PALETTES.dark };
+
+export function currentTheme() {
+  return document.documentElement.dataset.theme === "light" ? "light" : "dark";
+}
+
+// Switch the page and the chart colours; charts drawn earlier have to be redrawn by the caller.
+export function setTheme(name) {
+  Object.assign(COLORS, PALETTES[name]);
+  document.documentElement.dataset.theme = name;
+  try {
+    localStorage.setItem("theme", name);
+  } catch (error) {
+    // storage can be blocked in private windows: the theme then lasts until the page is closed
+  }
+}
 
 export const ESTIMATORS = {
   plain: { label: "Plain", color: COLORS.series[0] },
@@ -28,6 +47,24 @@ export const $ = (id) => document.getElementById(id);
 
 export function fmt(x, digits = 4) {
   return Number.isFinite(x) ? x.toFixed(digits) : "–";
+}
+
+// Count from the number on screen to the new value.
+export function countTo(element, value, digits = 4) {
+  const shown = Number(element.textContent);
+  const from = Number.isFinite(shown) ? shown : 0;
+  if (!Number.isFinite(value) || window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+    element.textContent = fmt(value, digits);
+    return;
+  }
+  const start = performance.now();
+  const step = (now) => {
+    const t = Math.min(1, (now - start) / 450);
+    const eased = 1 - (1 - t) ** 3;
+    element.textContent = fmt(from + (value - from) * eased, digits);
+    if (t < 1) requestAnimationFrame(step);
+  };
+  requestAnimationFrame(step);
 }
 
 export function fmtSci(x) {
@@ -66,17 +103,17 @@ export function clearError() {
   $("error-banner").hidden = true;
 }
 
-// Show a spinner on the given cards while the task runs; report failures in the banner.
-export async function withLoading(cardIds, context, task) {
-  const cards = cardIds.map($);
-  cards.forEach((card) => card.classList.add("is-loading"));
+// Show a spinner on the given nodes while the task runs; report failures in the banner.
+export async function withLoading(nodeIds, context, task) {
+  const nodes = nodeIds.map($);
+  nodes.forEach((node) => node.classList.add("is-loading"));
   try {
     return await task();
   } catch (error) {
     showError(context, error);
     return null;
   } finally {
-    cards.forEach((card) => card.classList.remove("is-loading"));
+    nodes.forEach((node) => node.classList.remove("is-loading"));
   }
 }
 
@@ -96,17 +133,17 @@ export function segmented(id, onChange) {
   };
 }
 
-const AXIS = {
-  gridcolor: COLORS.grid,
-  linecolor: COLORS.axis,
-  zerolinecolor: COLORS.axis,
-  tickfont: { color: COLORS.muted, size: 11 },
-  title: { font: { color: COLORS.text2, size: 12 } },
-  automargin: true,
-};
-
+// colours are read on every call, so a redraw picks up the current theme
 export function axis(title, extra = {}) {
-  return { ...AXIS, title: { ...AXIS.title, text: title }, ...extra };
+  return {
+    gridcolor: COLORS.grid,
+    linecolor: COLORS.axis,
+    zerolinecolor: COLORS.axis,
+    tickfont: { color: COLORS.muted, size: 11 },
+    title: { text: title, font: { color: COLORS.text2, size: 12 } },
+    automargin: true,
+    ...extra,
+  };
 }
 
 // log axis with ticks only at powers of ten
@@ -120,7 +157,7 @@ export function layout2d(extra = {}) {
     margin: { l: 58, r: 16, t: 36, b: 46 },
     // the legend sits above the plot so it never collides with the x-axis title
     legend: { orientation: "h", x: 0, y: 1.02, yanchor: "bottom", font: { color: COLORS.text2, size: 11 } },
-    hoverlabel: { bgcolor: "#16213a", bordercolor: COLORS.axis, font: { color: COLORS.text } },
+    hoverlabel: { bgcolor: COLORS.hover, bordercolor: COLORS.axis, font: { color: COLORS.text } },
     ...extra,
   };
 }

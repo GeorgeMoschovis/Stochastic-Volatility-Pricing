@@ -1,7 +1,7 @@
 // Tab 2: price and Greeks against spot for several maturities, and 3D surfaces over spot and maturity.
 
 import { postJSON } from "./api.js";
-import { $, CAMERAS, COLORS, SEQUENTIAL, axis, colorbar, layout2d, layout3d, plot, segmented, withLoading } from "./ui.js";
+import { $, CAMERAS, COLORS, axis, colorbar, layout2d, layout3d, plot, segmented, withLoading } from "./ui.js";
 
 const MATURITIES = [
   { T: 1 / 12, label: "1 month" },
@@ -31,6 +31,11 @@ export function init() {
   $("surface-greek").addEventListener("change", drawSurface);
 }
 
+export function redraw() {
+  drawCurves();
+  drawSurface();
+}
+
 export async function refresh(inputs) {
   lastInputs = inputs;
   const { S, K, T, r, q, sigma, kind } = inputs;
@@ -41,7 +46,7 @@ export async function refresh(inputs) {
   // add the option's own maturity so its marker sits exactly on the surface
   const tValues = [...new Set([...tGrid, T])].sort((a, b) => a - b);
 
-  const data = await withLoading(["card-greek-curves", "card-greek-surface"], "Could not compute the Greeks", () =>
+  const data = await withLoading(["node-greek-curves", "node-greek-surface"], "Could not compute the Greeks", () =>
     Promise.all([
       postJSON("/api/greeks-surface", { ...base, n_S: 121, T_values: MATURITIES.map((m) => m.T) }),
       postJSON("/api/greeks-surface", { ...base, n_S: 61, T_values: tValues }),
@@ -116,7 +121,7 @@ function drawSurface() {
     x: surfaceData.S,
     y: surfaceData.T,
     z: surfaceData[key],
-    colorscale: SEQUENTIAL,
+    colorscale: COLORS.sequential,
     colorbar: colorbar(label),
     contours: { z: { show: true, usecolormap: true, highlightcolor: COLORS.text, project: { z: false } } },
     hovertemplate: `S = %{x:.2f}<br>T = %{y:.2f} y<br>${label} = %{z:.4f}<extra></extra>`,

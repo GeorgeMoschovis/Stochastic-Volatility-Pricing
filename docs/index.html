@@ -61,7 +61,7 @@
 <h2 id="overview">Overview and notation</h2>
 <p>The project has two parts. <b>Part 1</b> prices a European option three ways (a closed formula, a binomial tree and Monte Carlo simulation), computes its sensitivities, and measures how fast the two numerical methods converge to the formula. <b>Part 2</b> takes real S&amp;P 500 option prices, shows that a single Black–Scholes volatility cannot explain them, and fits the Heston stochastic-volatility model to all maturities at once.</p>
 <p>Each topic below follows the same five steps: <b>intuition</b>, <b>mathematics</b>, <b>assumptions and limitations</b>, <b>how to read the output</b>, and <b>where it is implemented</b>.</p>
-<p>In the app each tab opens with its main result only. Click a section title to open the rest, and hover over an ⓘ for a one-line explanation of the number next to it.</p>
+<p>In the app the results of a tab hang from one vertical line, in the order they are computed. Each tab opens with its main result only. A hollow point marks a closed section: click its title to open it, and hover over an ⓘ for a one-line explanation of the number next to it. The button at the top right switches between the dark and the light blue theme.</p>
 
 <table>
   <tr><th>Symbol</th><th>Meaning</th><th class="num">Hull's example</th></tr>
@@ -110,7 +110,7 @@ $$c - p = S_0 e^{-qT} - K e^{-rT}$$
 <p>With Hull's example:</p>
 $$d_1 = \frac{\ln(42/40) + (0.10 + 0.02)\times 0.5}{0.2\sqrt{0.5}} = 0.7693, \qquad d_2 = 0.7693 - 0.1414 = 0.6278$$
 $$c = 42 \times 0.7791 - 40\,e^{-0.05} \times 0.7349 = 32.72 - 27.96 = 4.76, \qquad p = 0.81$$
-<p>The <b>Black–Scholes card</b> in the Pricer tab shows 4.7594. The parity check is \(c - p = 4.7594 - 0.8086 = 3.9508 = 42 - 40e^{-0.05}\).</p>
+<p>The <b>Black–Scholes</b> price at the top of the Pricer tab is 4.7594. The parity check is \(c - p = 4.7594 - 0.8086 = 3.9508 = 42 - 40e^{-0.05}\).</p>
 <div class="where"><b>Where it is implemented.</b> <code>pricing/black_scholes.py</code>: <code>bs_price</code>, <code>d1_d2</code>, and the analytic Greeks <code>bs_delta</code>, <code>bs_gamma</code>, <code>bs_vega</code>, <code>bs_theta</code>, <code>bs_rho</code>. All functions accept numpy arrays, which the 3D surfaces rely on.</div>
 
 <h2 id="binomial-tree">Binomial tree (Cox–Ross–Rubinstein)</h2>
@@ -130,7 +130,7 @@ $$V = e^{-r\Delta t}\big(p^*\,V_{\text{up}} + (1 - p^*)\,V_{\text{down}}\big)$$
 <h4>How to read the output</h4>
 <p>A two-step tree for Hull's call can be checked by hand: \(\Delta t = 0.25\), \(u = 1.1052\), \(d = 0.9048\), \(p^* = 0.6014\). The three final prices are 51.30, 42.00 and 34.39 with payoffs 11.30, 2.00 and 0, so</p>
 $$c = e^{-0.10 \times 0.5}\big[(0.6014)^2 \times 11.30 + 2 \times 0.6014 \times 0.3986 \times 2.00\big] = 4.80$$
-<p>The <b>Binomial tree card</b> uses 500 steps by default and shows 4.7593, which is 0.00008 below Black–Scholes. The second line of the card prices the same option with American exercise. For Hull's call the two agree, because early exercise of a call on a stock without dividends is never optimal. Switch to a put to see a difference: 0.9103 (American) against 0.8085 (European), an early-exercise premium of 0.10.</p>
+<p>The <b>Binomial tree</b> price uses 500 steps by default and is 4.7593, which is 0.00008 below Black–Scholes. Its ⓘ gives the price of the same option with American exercise. For Hull's call the two agree, because early exercise of a call on a stock without dividends is never optimal. Switch to a put to see a difference: 0.9103 (American) against 0.8085 (European), an early-exercise premium of 0.10.</p>
 <div class="where"><b>Where it is implemented.</b> <code>pricing/binomial.py</code>: <code>crr_price</code>. Each time step updates the whole layer of nodes with one numpy operation.</div>
 
 <h2 id="monte-carlo">Monte Carlo</h2>
@@ -201,7 +201,7 @@ $$\Delta \approx \frac{V(S+h) - V(S-h)}{2h}, \qquad \Gamma \approx \frac{V(S+h) 
 </table>
 <p>The <b>Finite difference</b> column applies the formulas above to the pricer chosen in the dropdown, and the <b>Difference</b> column shows finite difference minus analytic, with the relative error in brackets. Applied to the Black–Scholes formula the differences are tiny and only show the truncation error of the bump. Applied to the tree or to Monte Carlo they also contain that method's own error, and changing the spot bump shows the gamma effect described above.</p>
 <h3 id="greek-curves">Price and Greeks against the spot price</h3>
-<p>One line per maturity (1 month to 1 year, dark to light). The dotted vertical line is the strike. The buttons above the chart choose one quantity, or "All six" to see them side by side.</p>
+<p>One line per maturity (1 month to 1 year, in shades of blue). The dotted vertical line is the strike. The buttons above the chart choose one quantity, or "All six" to see them side by side.</p>
 <ul>
   <li><b>Price</b>: approaches the kinked payoff as maturity shortens.</li>
   <li><b>Delta</b>: an S-shaped curve from 0 to 1 for a call. Shorter maturities are steeper around the strike.</li>
@@ -211,7 +211,7 @@ $$\Delta \approx \frac{V(S+h) - V(S-h)}{2h}, \qquad \Gamma \approx \frac{V(S+h) 
   <li><b>Rho</b>: grows with maturity and with moneyness for a call.</li>
 </ul>
 <h3 id="greek-surface">3D surfaces</h3>
-<p>The same information as a surface over spot (one horizontal axis) and maturity (the other). The dropdown switches between price, delta, gamma and vega. Brighter means a higher value. The white marker is the option from the inputs panel. Drag to rotate, scroll to zoom, and use "Reset view" to return to the starting angle.</p>
+<p>The same information as a surface over spot (one horizontal axis) and maturity (the other). The dropdown switches between price, delta, gamma and vega. The colour bar gives the scale. The marker is the option from the inputs panel. Drag to rotate, scroll to zoom, and use "Reset view" to return to the starting angle.</p>
 <div class="where"><b>Where it is implemented.</b> <code>pricing/greeks.py</code>: <code>fd_greeks</code> (any pricer) and <code>compare_greeks</code> (analytic against finite difference with absolute and relative errors). The surfaces come from the vectorised functions in <code>pricing/black_scholes.py</code>.</div>
 
 <h2 id="implied-vol">Implied volatility</h2>
@@ -417,7 +417,7 @@ $$\min_{v_0,\,\kappa,\,\theta,\,\sigma_v,\,\rho}\ \sum_i w_i\Big(\sigma^{\text{I
 <h3 id="smiles">Smile chart</h3>
 <figure><img src="img/fit_smiles.png" alt="Market, Heston and flat Black-Scholes smiles for eight expiries"><figcaption>All eight expiries of the sample. The app shows one at a time, chosen in the dropdown.</figcaption></figure>
 <ul>
-  <li><b>White dots</b> are market implied volatilities, one per option.</li>
+  <li><b>Dots</b> are market implied volatilities, one per option.</li>
   <li><b>Blue line</b> is the Heston fit: the same five parameters in every panel.</li>
   <li><b>Dashed orange line</b> is the flat Black–Scholes benchmark for that expiry.</li>
 </ul>
@@ -426,7 +426,7 @@ $$\min_{v_0,\,\kappa,\,\theta,\,\sigma_v,\,\rho}\ \sum_i w_i\Big(\sigma^{\text{I
 <h3 id="vol-surface">3D volatility surface</h3>
 <p>The axes are log-moneyness \(k = \ln(K/F)\), maturity \(T\), and height. Three views are available:</p>
 <ul>
-  <li><b>Market:</b> the quotes interpolated linearly onto a grid (<code>scipy.interpolate.griddata</code>). The grid follows the quoted region, which is narrow for short maturities and wide for long ones, so nothing is extrapolated. The white points are the raw quotes.</li>
+  <li><b>Market:</b> the quotes interpolated linearly onto a grid (<code>scipy.interpolate.griddata</code>). The grid follows the quoted region, which is narrow for short maturities and wide for long ones, so nothing is extrapolated. The points are the raw quotes.</li>
   <li><b>Heston fit:</b> the model surface on the same grid. With "Market points" ticked (under "Display options"), the distance between points and surface is the fitting error.</li>
   <li><b>Error:</b> Heston minus market, in volatility points. The colour scale is centred at zero: grey means no error, red means the model is too high, blue too low. The points are the exact errors at the quotes.</li>
 </ul>

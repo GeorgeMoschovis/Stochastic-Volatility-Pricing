@@ -2,11 +2,11 @@
 
 import { getJSON, postJSON } from "./api.js";
 import {
-  $, CAMERAS, COLORS, DIVERGING, SEQUENTIAL, axis, colorbar, fmt, fmtPct, info, layout2d, layout3d, plot, renderMath,
+  $, CAMERAS, COLORS, axis, colorbar, fmt, fmtPct, info, layout2d, layout3d, plot, renderMath,
   segmented, withLoading,
 } from "./ui.js";
 
-const CARDS = ["card-vol-surface", "card-smile", "card-params", "card-fit"];
+const NODES = ["node-vol-surface", "node-smile", "node-params", "node-fit"];
 
 // responses of /api/market-data, /api/heston/calibrate and /api/heston/surface
 let market = null;
@@ -24,6 +24,11 @@ export function init() {
   $("calibrate").addEventListener("click", calibrate);
 }
 
+export function redraw() {
+  drawSurface();
+  drawSmile();
+}
+
 export async function refresh() {
   // first visit: show the offline sample straight away, no network needed
   if (!market) await loadMarket("sample");
@@ -36,7 +41,7 @@ function quotesBody() {
 async function loadMarket(source) {
   const r = Number($("market-rate").value);
   $("market-status").textContent = source === "live" ? "Downloading option chains…" : "Loading the offline sample…";
-  const loaded = await withLoading(CARDS, "Could not load market data", async () => {
+  const loaded = await withLoading(NODES, "Could not load market data", async () => {
     const data = await getJSON("/api/market-data", { r, source });
     const quotes = data.quotes.map(({ T, strike, forward, iv }) => ({ T, strike, forward, iv }));
     return { data, surface: await postJSON("/api/heston/surface", { quotes }) };
@@ -77,7 +82,7 @@ async function calibrate() {
   button.textContent = "Calibrating…";
   $("market-status").textContent =
     `Fitting 5 parameters to ${market.quotes.length} implied volatilities across ${market.expiries.length} maturities…`;
-  const result = await withLoading(CARDS, "Calibration failed", async () => {
+  const result = await withLoading(NODES, "Calibration failed", async () => {
     const calibration = await postJSON("/api/heston/calibrate", { r: market.meta.r, quotes: quotesBody() });
     const surface = await postJSON("/api/heston/surface", { params: calibration.params, quotes: quotesBody() });
     return { calibration, surface };
@@ -134,7 +139,7 @@ function drawSurface() {
     x: grid.k,
     y,
     z,
-    colorscale: isError ? DIVERGING : SEQUENTIAL,
+    colorscale: isError ? COLORS.diverging : COLORS.sequential,
     // centre the diverging scale on zero so the neutral colour means "no error"
     ...(isError ? { cmid: 0 } : {}),
     colorbar: colorbar(label),
@@ -209,7 +214,7 @@ function fillParams() {
   // label, value, explanation shown on hover
   const tiles = [
     ["RMSE Heston", fit.rmse.toFixed(2), "Typical fitting error of the Heston model across all quotes, in volatility points."],
-    ["RMSE flat Black–Scholes", fit.rmse_flat_bs.toFixed(2), "The same error when each maturity gets one constant volatility. This is the benchmark Heston has to beat."],
+    ["RMSE flat BS", fit.rmse_flat_bs.toFixed(2), "The same error when each maturity gets one constant volatility. This is the benchmark Heston has to beat."],
     ["\\(v_0\\)", fmt(p.v0, 4), `Variance today: \\(\\sqrt{v_0}\\) = ${fmtPct(Math.sqrt(p.v0), 1)} is the volatility the model starts from.`],
     ["\\(\\kappa\\)", fmt(p.kappa, 2), `Speed of mean reversion: a gap between today's and the long-run variance halves every ${halfLifeText}.`],
     ["\\(\\theta\\)", fmt(p.theta, 4), `Long-run variance: \\(\\sqrt{\\theta}\\) = ${fmtPct(Math.sqrt(p.theta), 1)} is the volatility the model drifts towards.`],

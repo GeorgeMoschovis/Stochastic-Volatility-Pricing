@@ -1,0 +1,41 @@
+/* Colours of the two themes. Everything else reads these variables. */
+
+/* dark (default) */
+:root {
+  color-scheme: dark;
+  --bg: #0b1220;
+  --surface: #111a2e;
+  --surface-2: #16213a;
+  --border: #22304f;
+  --border-soft: rgba(34, 48, 79, 0.6);
+  --text: #e6ebf5;
+  --text-2: #a9b4c9;
+  --muted: #7c89a3;
+  --accent: #3987e5;
+  --accent-soft: rgba(57, 135, 229, 0.14);
+  --bad: #e66767;
+  --error-text: #f3b4b4;
+  --topbar: rgba(11, 18, 32, 0.92);
+  --overlay: rgba(11, 18, 32, 0.55);
+  --radius: 10px;
+  --gap: 16px;
+}
+
+/* light blue */
+:root[data-theme="light"] {
+  color-scheme: light;
+  --bg: #eaf2fb;
+  --surface: #f8fbff;
+  --surface-2: #e9f1fa;
+  --border: #cbd9ea;
+  --border-soft: rgba(203, 217, 234, 0.8);
+  --text: #15233b;
+  --text-2: #44546d;
+  --muted: #6a7a92;
+  --accent: #1f6fd1;
+  --accent-soft: rgba(31, 111, 209, 0.12);
+  --bad: #c93c3c;
+  --error-text: #a12d2d;
+  --topbar: rgba(234, 242, 251, 0.92);
+  --overlay: rgba(234, 242, 251, 0.6);
+}

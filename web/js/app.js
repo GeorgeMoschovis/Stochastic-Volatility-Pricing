@@ -4,7 +4,7 @@ import * as convergence from "./convergence.js";
 import * as greeks from "./greeks.js";
 import * as pricer from "./pricer.js";
 import * as surface from "./surface.js";
-import { $, bindDisclosure, bindResetButtons, clearError, renderMath, segmented } from "./ui.js";
+import { $, bindDisclosure, bindResetButtons, clearError, currentTheme, renderMath, segmented, setTheme } from "./ui.js";
 
 const TABS = { pricer, greeks, convergence, surface };
 const HULL = { S: 42, K: 40, T: 0.5, sigma: 0.2, r: 0.1, q: 0, n_steps: 500, n_paths: 100000, seed: 42 };
@@ -51,7 +51,16 @@ function showTab(name) {
   window.dispatchEvent(new Event("resize"));
 }
 
+// The button names the theme it switches to.
+function applyTheme(name) {
+  setTheme(name);
+  $("theme-toggle").textContent = name === "dark" ? "Light theme" : "Dark theme";
+  Object.values(TABS).forEach((tab) => tab.redraw());
+}
+
 function init() {
+  applyTheme(currentTheme());
+  $("theme-toggle").addEventListener("click", () => applyTheme(currentTheme() === "dark" ? "light" : "dark"));
   renderMath(document.body);
   bindResetButtons();
   bindDisclosure();
